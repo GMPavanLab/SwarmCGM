@@ -5,7 +5,7 @@ lipids_codes: # lipids and temperatures to use for this optimization (other inpu
 gmx_path: gmx  # path/alias to GROMACS
 output_folder: ""  # string, empty = new directory named after timestamp, filled = continue opti from current state of this given directory
 
-# CONDITIONS OF THE OPTIMIZATION: CHOICE OF THE PARAMETERS TO BE OPTIMIZED
+# 2. CONDITIONS OF THE OPTIMIZATION: CHOICE OF THE PARAMETERS TO BE OPTIMIZED
 cg_time_equi: 20  # ns, CG MD equilibration time
 cg_time_prod: 200  # ns, CG MD production time
 tune_bonds_equi_val: all  # 'all' or list of bond types for which equilibrium values will be optimized
@@ -15,9 +15,9 @@ tune_angles_fct: all
 tune_radii: False
 tune_radii_in_groups: None  # if ns.tune_radii is True, the same radii can be specified here for several beads
 tune_eps: True
-eps_flat_range: None  # float or None, limit the range of epsilons variations around (+/-) the value given in "init_nonbonded"
+eps_flat_range: None  # float or None, limit the range of epsilons variations around (+/-) the value given in 'init_nonbonded'
 
-# CONDITIONS OF THE OPTIMIZATION: RANGES OF THE PARAMETERS TO BE OPTIMIZED
+# 3. CONDITIONS OF THE OPTIMIZATION: RANGES OF THE PARAMETERS TO BE OPTIMIZED
 min_radius: 0.12
 max_radius: 0.35
 min_epsilon: 0.10
@@ -31,7 +31,7 @@ dhh_base_perc_error: 10
 apl_cap_perc_error: 30
 dhh_cap_perc_error: 30
 
-# REFERENCE ALL-ATOM (AA) DATA USED FOR THE BOTTOM-UP COMPONENT OF THE SCORE
+# 4. REFERENCE ALL-ATOM (AA) DATA USED FOR THE BOTTOM-UP COMPONENT OF THE SCORE
 mapping_type: MARTINI  # string, your mapping/framework type (defines where input files will be searched for)
 solv: WET  # WET or DRY, for explicit or implicit solvent (defines where input files will be searched for)
 map_center: COG  # COG or COM, for Center Of Geometry or Center Of Mass
@@ -41,19 +41,19 @@ phosphate_pos:  # position of the phosphate atom or bead, used for calculating D
     AA: 20  # atom id of the phosphate, 1-indexed
     CG: 2  # bead id of the bead containing the phosphate, 1-indexed
 
-# PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: GENERAL
+# 5. PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: GENERAL
 nb_cores_analysis: 8  # number of cores to use for analysis on the machine or node running the optimisation software
 
-# PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: SPECIFIC TO HPC RESOURCE (SLURM ONLY)
+# 6. PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: SPECIFIC TO HPC RESOURCE (SLURM ONLY)
 master_job_name: "MASTER"  # name of the master job
 nb_hpc_slots: 0  # max number of nodes to be used at a single time
 
-# PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: SPECIFIC TO A LOCAL COMPUTER
+# 7. PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: SPECIFIC TO A LOCAL COMPUTER
 nb_threads: "4 4"  # string, space-separated number of OpenMP threads to use, defining the number of "slots" for simulations
 gpu_id: ""  # string, space-separated GPU ids to use per "slot" defined in nb_threads
-gmx_additional_args_str: ""  # string, additional GROMACS arguments that
+gmx_additional_args_str: ""  # string, additional arguments to be appended to the GROMACS command line TODO: split into mini/equi/prod
 
-# analysis of the simulations
+# 8. PARAMETERS FOR THE ANALYSIS OF THE BOTTOM-UP COMPONENT OF THE SCORE
 bw_constraints: 0.002  # nm
 bw_bonds: 0.01  # nm
 bonds_max_range: 5  # nm, max range of the histograms created for EMD calculations
@@ -65,7 +65,7 @@ eq_val_density_thres_constraints: 0.05  # cutoff to select equi val ranges, with
 eq_val_density_thres_bonds: 0.05  # cutoff to select equi val ranges, with respect to max density per bond type
 eq_val_density_thres_angles: 0.333  # cutoff to select equi val ranges, with respect to max density per angle type
 
-# amplitude variations created randomly around the starting FF parameters (+/- values below) to initialize the swarm
+# 9. amplitude variations created randomly around the starting FF parameters (+/- values below) to initialize the swarm
 bond_value_guess_variation: 0.02  # nm
 angle_value_guess_variation: 20  # degrees
 bond_fct_guess_variation: 3000  # fct units
