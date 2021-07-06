@@ -13,7 +13,9 @@
 
 # Overview
 
-Automatic data-driven approaches are increasingly used to develop accurate molecular models. But the parameters of such automatically-optimised models are typically untransferable. Using a multi-reference approach in combination with an automatic optimisation engine (SwarmCGᴍ), here we show that it is possible to optimise coarse-grained (CG) lipid models that are also transferable, generating optimised lipid force fields. The parameters of the CG lipid models are iteratively and simultaneously optimised against higher-resolution simulations (bottom-up) and experimental data (top-down references). Including different types of lipid bilayers in the training set guarantees the transferability of the optimised force field parameters. Tested against state-of-the-art CG lipid force fields, we demonstrate that SwarmCGᴍ can systematically improve their parameters, enhancing the agreement with the experiments even for lipid types not included in the training set. The approach is general and can be used to improve existing CG lipid force fields, as well as to develop new custom ones.
+Automatic data-driven approaches are increasingly used to develop accurate molecular models. But the parameters of such automatically-optimised models are typically untransferable. Using a multi-reference approach in combination with an automatic optimisation engine (SwarmCGᴍ), here we show that it is possible to optimise coarse-grained (CG) lipid models that are also transferable, generating optimised lipid force fields.
+
+The parameters of the CG lipid models are iteratively and simultaneously optimised against higher-resolution simulations (bottom-up) and experimental data (top-down references). Including different types of lipid bilayers in the training set guarantees the transferability of the optimised force field parameters. Tested against state-of-the-art CG lipid force fields, we demonstrate that SwarmCGᴍ can systematically improve their parameters, enhancing the agreement with the experiments even for lipid types not included in the training set. The approach is general and can be used to improve existing CG lipid force fields, as well as to develop new custom ones.
 
 # System Requirements
 
@@ -37,7 +39,7 @@ Tested operating systems:
 For testing purposes, the following specs will be sufficient:
 
 - RAM: 4+ GB  
-- CPU: 4+ cores, 2.0+ GHz/core
+- CPU: 8+ cores, 2.0+ GHz/core
 - GPU: optional
 
 For decent performance, it is recommended to use:
@@ -84,13 +86,14 @@ For a quick demonstration of the software, one can execute the following command
 python3 optimize_lipids.py -cfg minimalistic_demo.yaml
 ```
 
-This minimalistic example should execute within 12-24 hours on the "testing purpose" hardware described, and produce suboptimal CG models of the 2 PC lipids used in the testing set due to:
-- the short MD simulation times employed
-- the low number of particles used in the swarm
+This minimalistic example should execute within 12-24 hours on the "testing purpose" hardware described. It will be possible to see that the FF score decreases during optimization, however this will not result in realistically optimal lipid models, due to:
+- the small size of the training set (limited transferability constraint: only 2 different lipids)
+- the short MD simulation times employed (limited sampling: only 3 ns of equilibration and 50 ns of production)
+- the low number of particles used in the swarm (limited exploration of the FF parameters: only 3 particles)
 
-Which are necessary limits to be introduced here for quick demonstration purposes, and are also well-suited for testing the software with your own input of parameters for a specific optimization run.
+which are necessary limits to be introduced here for quick demonstration purposes. These values can be even further decreased for the purpose of testing the consistency of your own input configuration files for a specific optimization run.
 
-As the input of SwarmCGᴍ requires a preliminary CG mapping choice, several parameters allow to define precisely which parameters should be optimized, or which other ones stay at given fixed values, according to your requirements.
+As the input of SwarmCGᴍ requires a preliminary CG mapping choice (*i.e.* defining the positions and types of the CG beads, bonds and angles used for building the molecular models which parameters will be optimized), several parameters allow to define precisely which parameters should be optimized, or which other ones stay at given fixed values, according to your requirements.
 To this end, SwarmCGᴍ makes use of [YAML](https://yaml.org/) config files to simplify this process and help keeping track of the hyper-parameters used for an optimization run. 
 
 Please refer to the documentation for a breakdown of each parameter and step-by-step guidance on how to parametrize an optimization procedure. Additional example config files are provided in section [Reproduction instructions](#reproduction-instructions) and can also be related to the content and explanations provided in the paper.
@@ -103,21 +106,21 @@ All optimized CG models and their associated FFs can be found in directory: [res
 
 The config files cited in the 3 next subsections are available in directory: [reproducibility](https://github.com/GMPavanLab/SwarmCGM/reproducibility)
 
-## Example 1: Optimisation of Martini-based CG models of PC lipids in explicit solvent
+### Example 1: Optimisation of Martini-based CG models of PC lipids in explicit solvent
 
 ```
 # cd src
 python3 optimize_lipids.py -cfg example1.yaml
 ```
 
-## Example 2: Optimisation of Martini-based CG models of lipids in implicit solvent
+### Example 2: Optimisation of Martini-based CG models of lipids in implicit solvent
 
 ```
 # cd src
 python3 optimize_lipids.py -cfg example2.yaml
 ```
 
-## Example 3: Conception of custom low-resolution CG lipid models in implicit solvent
+### Example 3: Conception of custom low-resolution CG lipid models in implicit solvent
 
 ```
 # cd src
