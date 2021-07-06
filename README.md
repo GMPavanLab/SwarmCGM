@@ -51,22 +51,22 @@ For decent performance, it is recommended to use:
 ## HPC usage
 
 For optimal performance, SwarmCGᴍ can be executed on HPC resources.
-This enables calibrating accurate CG lipid FFs via the usage of many different lipids in the training set, which allows to fully take advantage of the transferability constraint imposed to the FF (*i.e.* the FF parameters are tested at each iteration via multiple CG simulations of lipid bilayers). 
+This enables calibrating accurate CG lipid FFs via the usage of many different lipids in the training set, which allows to fully take advantage of the transferability constraint imposed to the parameters of the FF (*i.e.* the FF parameters are tested at each iteration via multiple CG simulations of lipid bilayers). 
 
 Supported HPC resource managers:
 - SLURM
 
 # Installation Guide
 
-Standalone files can be directly copied as [provided here](https://github.com/GMPavanLab/SwarmCGM/src) and are ready for usage.
+Standalone files can be directly copied as [provided here](https://github.com/GMPavanLab/SwarmCGM/src).
 
 Users must install the following python packages prior to executing the code:
 
 ```
-pip install numpy scipy matplotlib MDAnalysis pyemd fst-pso
+pip/pip3 install numpy scipy matplotlib MDAnalysis pyemd fst-pso
 ```
 
-which will install in about 2-5 minutes on a machine with the "testing purposes" specifications.
+which will install in about 2-5 minutes on a machine with the "testing purposes" hardware described.
 
 If you are having troubles installing or using this software, please [drop us an Issue](https://github.com/GMPavanLab/SwarmCGM/issues). 
 
@@ -87,12 +87,17 @@ For a quick demonstration of the software, one can execute the following command
 python3 optimize_lipids.py -cfg minimalistic_demo.yaml
 ```
 
-This minimalistic example should execute within 12-24 hours on the "testing purpose" hardware described. It will be possible to see that the FF score decreases during optimization, however this will not result in realistically optimal lipid models, due to:
+This minimalistic example should execute within 12-24 hours on the "testing purpose" hardware described, and will require 2 calculation slots of 4 cores each (no GPU).
+It will be possible to see that the FF score decreases during optimization, and that the 2 different lipid bilayers have decreasing % deviation on their area per lipid (APL) and Dʜʜ thickness with respect to experimental data.
+The OT-B and OT-NB metrics will also decrease, indicating that the FF parameters reproduce the spatial features described in the (mapped) AA reference trajectories.
+ 
+However, this will not result in realistically optimal lipid models, due to:
 - the small size of the training set (limited transferability constraint: only 2 different lipids)
-- the short MD simulation times employed (limited sampling: only 3 ns of equilibration and 50 ns of production)
+- the short MD simulation times employed (limited sampling: only 3 ns of equilibration and 25 ns of production)
 - the low number of particles used in the swarm (limited exploration of the FF parameters: only 3 particles)
 
-which are necessary limits to be introduced here for quick demonstration purposes. These values can be even further decreased for the purpose of testing the consistency of your own input configuration files for a specific optimization run.
+which are necessary limits to be introduced here for quick (laptop/desktop) demonstration purposes.
+These values can be even further decreased for the purpose of testing the consistency of your own input configuration files for a specific optimization run.
 
 As the input of SwarmCGᴍ requires a preliminary CG mapping choice (*i.e.* defining the positions and types of the CG beads, bonds and angles used for building the molecular models which parameters will be optimized), several parameters allow to define precisely which parameters should be optimized, or which other ones stay at given fixed values, according to your requirements.
 To this end, SwarmCGᴍ makes use of [YAML](https://yaml.org/) config files to simplify this process and help keeping track of the hyper-parameters used for an optimization run. 
