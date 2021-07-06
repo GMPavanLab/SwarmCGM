@@ -1,0 +1,11 @@
+#include "force_field.itp"
+#include "DLPC.itp"
+
+[ system ]
+; name
+Our MARTINI3 system
+
+[ molecules ]
+; name        number
+DLPC 128
+WN   1727

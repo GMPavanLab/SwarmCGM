@@ -1,0 +1,11 @@
+#include "force_field.itp"
+#include "SDPC.itp"
+
+[ system ]
+; name
+Our MARTINI3 system
+
+[ molecules ]
+; name        number
+SDPC 128
+WN   1473

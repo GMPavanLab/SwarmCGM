@@ -1,0 +1,11 @@
+#include "force_field.itp"
+#include "PDPC.itp"
+
+[ system ]
+; name
+Our MARTINI3 system
+
+[ molecules ]
+; name        number
+PDPC 128
+WN   1505

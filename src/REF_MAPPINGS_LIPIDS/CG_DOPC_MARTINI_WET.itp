@@ -1,0 +1,64 @@
+[moleculetype]
+; molname      nrexcl
+  DOPC          1
+
+[atoms]
+; id  type  resnr   residu  atom  cgnr  charge
+
+   1  Q0   1  DOPC  NC3    1  1.0   
+   2  Q1   1  DOPC  PO4    2  -1.0  
+   3  N2a  1  DOPC  GL1    3  0   
+   4  N2a  1  DOPC  GL2    4  0   
+
+   5  SC2  1  DOPC  SC2A   5  0   
+   6  SC2  1  DOPC  SC2A   6  0   
+   7  C3   1  DOPC  C3A    7  0   
+   8  C1   1  DOPC  C1A    8  0   
+   9  SC2  1  DOPC  SC2A   9  0   
+
+  10  SC2  1  DOPC  SC2B  10  0   
+  11  SC2  1  DOPC  SC2B  11  0   
+  12  C3   1  DOPC  C3B   12  0   
+  13  C1   1  DOPC  C1B   13  0
+  14  SC2  1  DOPC  SC2B  14  0
+
+[bonds]
+;  i  j   funct   length  force.c.
+
+   1  2       1      0.0      0.0  ; B1
+   2  3       1      0.0      0.0  ; B2
+   3  4       1      0.0      0.0  ; B3
+
+   3  5       1      0.0      0.0  ; B4
+   5  6       1      0.0      0.0  ; B5
+   6  7       1      0.0      0.0  ; B6
+   7  8       1      0.0      0.0  ; B7
+   8  9       1      0.0      0.0  ; B8
+
+   4 10       1      0.0      0.0  ; B4
+  10 11       1      0.0      0.0  ; B5
+  11 12       1      0.0      0.0  ; B6
+  12 13       1      0.0      0.0  ; B7
+  13 14       1      0.0      0.0  ; B8
+
+[angles]
+;  i  j  k  funct   angle   force.c.
+
+   1  2  3      2     0.0       0.0  ; A1
+   2  3  4      2     0.0       0.0  ; A2
+   2  3  5      2     0.0       0.0  ; A3
+   4  3  5      2     0.0       0.0  ; A22
+
+   3  5  6      2     0.0       0.0  ; A4
+   5  6  7      2     0.0       0.0  ; A5
+   6  7  8      2     0.0       0.0  ; A6
+   7  8  9      2     0.0       0.0  ; A7
+
+   3  4 10      2     0.0       0.0  ; A21
+   4 10 11      2     0.0       0.0  ; A4
+  10 11 12      2     0.0       0.0  ; A5
+  11 12 13      2     0.0       0.0  ; A6
+  12 13 14      2     0.0       0.0  ; A7
+
+
+  
