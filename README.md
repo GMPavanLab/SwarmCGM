@@ -70,13 +70,14 @@ which will install in about 2-5 minutes on a machine with the "testing purposes"
 
 If you are having troubles installing or using this software, please [drop us an Issue](https://github.com/GMPavanLab/SwarmCGM/issues). 
 
-Tested package versions:
-- numpy 1.19.2
-- scipy 1.5.2
-- matplotlib 3.3.2
-- MDAnalysis 1.0.0
-- pyemd 0.5.1
-- fst-pso 1.7.15
+Tested python & package versions:
+- python: 3.6.12, 3.8.5
+- numpy: 1.1.16, 1.19.2
+- scipy: 1.4.1, 1.5.2
+- matplotlib: 3.3.2
+- MDAnalysis: 1.0.0, 1.0.1
+- pyemd: 0.5.1
+- fst-pso: 1.7.15
 
 # Demo
 
