@@ -6,7 +6,7 @@
 - [System Requirements](#system-requirements)
 - [Installation Guide](#installation-guide)
 - [Demo](#demo)
-- [Results & reproduction instructions](#results-&-reproduction-instructions)
+- [Results & Reproduction](#results-&-reproduction)
 - [License](./LICENSE)
 - [Issues](https://github.com/GMPavanLab/SwarmCGM/issues)
 - [Citation](#citation)
@@ -58,7 +58,7 @@ Supported HPC resource managers:
 
 # Installation Guide
 
-Standalone files can be directly copied as [provided here](https://github.com/GMPavanLab/SwarmCGM/src).
+Standalone files can be directly copied as [provided here](https://github.com/GMPavanLab/SwarmCGM/src/).
 
 Users must install the following python packages prior to executing the code:
 
@@ -104,12 +104,12 @@ As the input of SwarmCGᴍ requires a preliminary CG mapping choice (*i.e.* defi
 To this end, SwarmCGᴍ makes use of [YAML](https://yaml.org/) config files to simplify this process and help keeping track of the hyper-parameters used for an optimization run. 
 
 Please refer to [the manual](https://github.com/GMPavanLab/SwarmCGM/Manual.pdf) for a breakdown of each parameter and step-by-step guidance on how to parametrize an optimization procedure.
-Additional example config files are provided in section [Reproduction instructions](#reproduction-instructions) and can also be related to the content and explanations provided in the paper.
+Additional example config files are provided below and can also be related to the content and explanations provided in the paper.
 
-# Results & reproduction instructions
+# Results & Reproduction
 
-All the optimized CG models produced in the paper, and their associated FFs, can be found in folder [results](https://github.com/GMPavanLab/SwarmCGM/results).
-The config files cited in the 3 next subsections are available in the 3 corresponding subdirectories in [results](https://github.com/GMPavanLab/SwarmCGM/results).
+All the optimized CG models produced in the paper, and their associated FFs, can be found in folder [results](https://github.com/GMPavanLab/SwarmCGM/results/).
+The config files cited in the 3 next subsections are available in the 3 corresponding subdirectories.
 
 ### Example 1: Optimisation of Martini-based CG models of PC lipids in explicit solvent
 
