@@ -6,10 +6,10 @@
 - [System Requirements](#system-requirements)
 - [Installation Guide](#installation-guide)
 - [Demo](#demo)
-- [Results](#results)
-- [Reproduction instructions](#reproduction-instructions)
+- [Results & reproduction instructions](#results-&-reproduction-instructions)
 - [License](./LICENSE)
 - [Issues](https://github.com/GMPavanLab/SwarmCGM/issues)
+- [Citation](#citation)
 
 # Overview
 
@@ -50,7 +50,8 @@ For decent performance, it is recommended to use:
 
 ## HPC usage
 
-For optimal performance, and for obtaining accurate FFs via the usage of many different lipids in the training set, SwarmCGᴍ can be executed on HPC resources.
+For optimal performance, SwarmCGᴍ can be executed on HPC resources.
+This enables calibrating accurate CG lipid FFs via the usage of many different lipids in the training set, which allows to fully take advantage of the transferability constraint imposed to the FF (*i.e.* the FF parameters are tested at each iteration via multiple CG simulations of lipid bilayers). 
 
 Supported HPC resource managers:
 - SLURM
@@ -59,13 +60,13 @@ Supported HPC resource managers:
 
 Standalone files can be directly copied as [provided here](https://github.com/GMPavanLab/SwarmCGM/src) and are ready for usage.
 
-Users should install the following python packages prior to executing the code:
+Users must install the following python packages prior to executing the code:
 
 ```
 pip install numpy scipy matplotlib MDAnalysis pyemd fst-pso
 ```
 
-which will install in about 1-3 minutes on a machine with the minimal specs.
+which will install in about 2-5 minutes on a machine with the "testing purposes" specifications.
 
 If you are having troubles installing or using this software, please [drop us an Issue](https://github.com/GMPavanLab/SwarmCGM/issues). 
 
@@ -96,17 +97,17 @@ which are necessary limits to be introduced here for quick demonstration purpose
 As the input of SwarmCGᴍ requires a preliminary CG mapping choice (*i.e.* defining the positions and types of the CG beads, bonds and angles used for building the molecular models which parameters will be optimized), several parameters allow to define precisely which parameters should be optimized, or which other ones stay at given fixed values, according to your requirements.
 To this end, SwarmCGᴍ makes use of [YAML](https://yaml.org/) config files to simplify this process and help keeping track of the hyper-parameters used for an optimization run. 
 
-Please refer to the documentation for a breakdown of each parameter and step-by-step guidance on how to parametrize an optimization procedure. Additional example config files are provided in section [Reproduction instructions](#reproduction-instructions) and can also be related to the content and explanations provided in the paper.
+Please refer to [the manual](https://github.com/GMPavanLab/SwarmCGM/Manual.pdf) for a breakdown of each parameter and step-by-step guidance on how to parametrize an optimization procedure.
+Additional example config files are provided in section [Reproduction instructions](#reproduction-instructions) and can also be related to the content and explanations provided in the paper.
 
-# Results
+# Results & reproduction instructions
 
-All optimized CG models and their associated FFs can be found in directory: [results](https://github.com/GMPavanLab/SwarmCGM/results)
-
-# Reproduction instructions
-
-The config files cited in the 3 next subsections are available in directory: [reproducibility](https://github.com/GMPavanLab/SwarmCGM/reproducibility)
+All the optimized CG models produced in the paper, and their associated FFs, can be found in folder [results](https://github.com/GMPavanLab/SwarmCGM/results).
+The config files cited in the 3 next subsections are available in the 3 corresponding subdirectories in [results](https://github.com/GMPavanLab/SwarmCGM/results).
 
 ### Example 1: Optimisation of Martini-based CG models of PC lipids in explicit solvent
+
+For this demonstration, we use reference data from 7 different phosphatidylcholine (PC) lipids and create optimized CG models of high resolution, in the framework of Martini and in explicit solvent.
 
 ```
 # cd src
@@ -115,6 +116,8 @@ python3 optimize_lipids.py -cfg example1.yaml
 
 ### Example 2: Optimisation of Martini-based CG models of lipids in implicit solvent
 
+For this demonstration, we use reference data from 4 different phosphatidylcholine (PC) lipids and create optimized CG models of high resolution, in the framework of Martini and in implicit solvent.
+
 ```
 # cd src
 python3 optimize_lipids.py -cfg example2.yaml
@@ -122,7 +125,13 @@ python3 optimize_lipids.py -cfg example2.yaml
 
 ### Example 3: Conception of custom low-resolution CG lipid models in implicit solvent
 
+For this demonstration, we use reference data from 4 different phosphatidylcholine (PC) lipids and create optimized CG models of low resolution, ab-initio and in implicit solvent.
+
 ```
 # cd src
 python3 optimize_lipids.py -cfg example3.yaml
 ```
+
+# Citation
+
+The preprint for SwarmCGᴍ can be found [on ArXiv](arxiv.org/abs/2107.01012).
