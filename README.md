@@ -1,6 +1,6 @@
 # SwarmCGᴍ
 
-## Contents
+### Contents
 
 - [Overview](#overview)
 - [System Requirements](#system-requirements)
@@ -34,7 +34,7 @@ Tested operating systems:
 - Ubuntu 18.04  
 - SUSE Linux Enterprise Server 15 SP1
 
-## Local usage
+### Local usage
 
 For testing purposes, the following specs will be sufficient:
 
@@ -48,7 +48,7 @@ For decent performance, it is recommended to use:
 - CPU: 36+ cores, 3.6+ Ghz/core
 - GPU: optional
 
-## HPC usage
+### HPC usage
 
 For optimal performance, SwarmCGᴍ can be executed on HPC resources.
 This enables calibrating accurate CG lipid FFs via the usage of many different lipids in the training set, which allows to fully take advantage of the transferability constraint imposed to the parameters of the FF (*i.e.* the FF parameters are tested at each iteration via multiple CG simulations of lipid bilayers). 
