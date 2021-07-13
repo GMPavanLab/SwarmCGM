@@ -58,7 +58,7 @@ Supported HPC resource managers:
 
 # Installation Guide
 
-Standalone files can be directly copied as [provided here](https://github.com/GMPavanLab/SwarmCGM/tree/main/src/).
+Standalone files can be directly copied as [provided here](https://github.com/GMPavanLab/SwarmCGM/tree/main/).
 
 Users must install the following python packages prior to executing the code:
 
@@ -84,17 +84,16 @@ Tested python & package versions:
 For a quick demonstration of the software, one can execute the following command:
 
 ```
-# cd src
 python3 optimize_lipids.py -cfg minimalistic_demo.yaml
 ```
 
-This minimalistic example should execute within 12-24 hours on the "testing purpose" hardware described, and will require 2 calculation slots of 4 cores each (no GPU).
+This minimalistic example should execute within 18-24 hours on the "testing purpose" hardware described, and will require 2 calculation slots of 4 cores each (no GPU).
 It will be possible to see that the FF score decreases during optimization, and that the 2 different lipid bilayers have decreasing % deviation on their area per lipid (APL) and Dʜʜ thickness with respect to experimental data.
 The OT-B and OT-NB metrics will also decrease, indicating that the FF parameters reproduce the spatial features described in the (mapped) AA reference trajectories.
  
 However, this will not result in realistically optimal lipid models, due to:
 - the small size of the training set (limited transferability constraint: only 2 different lipids)
-- the short MD simulation times employed (limited sampling: only 3 ns of equilibration and 25 ns of production)
+- the short MD simulation times employed (limited sampling: only 3 ns of equilibration and 20 ns of production)
 - the low number of particles used in the swarm (limited exploration of the FF parameters: only 3 particles)
 
 which are necessary limits to be introduced here for quick (laptop/desktop) demonstration purposes.
@@ -116,7 +115,6 @@ The config files cited in the 3 next subsections are available in the 3 correspo
 For this demonstration, we use reference data from 7 different phosphatidylcholine (PC) lipids and create optimized CG models of high resolution, in the framework of Martini and in explicit solvent.
 
 ```
-# cd src
 python3 optimize_lipids.py -cfg example1.yaml
 ```
 
@@ -125,7 +123,6 @@ python3 optimize_lipids.py -cfg example1.yaml
 For this demonstration, we use reference data from 4 different phosphatidylcholine (PC) lipids and create optimized CG models of high resolution, in the framework of Martini and in implicit solvent.
 
 ```
-# cd src
 python3 optimize_lipids.py -cfg example2.yaml
 ```
 
@@ -134,7 +131,6 @@ python3 optimize_lipids.py -cfg example2.yaml
 For this demonstration, we use reference data from 4 different phosphatidylcholine (PC) lipids and create optimized CG models of low resolution, ab-initio and in implicit solvent.
 
 ```
-# cd src
 python3 optimize_lipids.py -cfg example3.yaml
 ```
 

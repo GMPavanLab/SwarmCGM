@@ -58,7 +58,7 @@ def get_CG_angles_distrib_lipids(ns, beads_ids, cg_iter_universe):
     angle_values_deg = np.rad2deg(angle_values_rad)
     angle_avg = round(np.mean(angle_values_deg), 3)
     angle_hist = np.histogram(angle_values_deg, ns.bins_angles, density=True)[
-                     0] * ns.bw_angles  # retrieve 1-sum densities
+                     0] * ns.user_config['bw_angles']  # retrieve 1-sum densities
 
     return angle_avg, angle_hist
 
@@ -107,10 +107,8 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
     #       (anyway the impact would be very small but really, who knows ??)
 
     # get the id of the bead that should be used as reference for Dhh calculation + the delta for Dhh calculation, if any
-    head_type = lipid_code[
-                2:]  # TODO: when we start incorporating lipids for which the code is not 4 letters this won't hold
-    phosphate_bead_id, _ = config.phosphate_pos[ns.mapping_type][ns.solv][head_type]
-    phosphate_bead_id -= 1
+    head_type = lipid_code[2:]  # NOTE: when we start incorporating lipids for which the code is not 4 letters this won't hold
+    phosphate_bead_id = int(ns.user_config['phosphate_pos'][head_type]['CG']) - 1
 
     # to ensure thickness calculations are not affected by bilayer being split on Z-axis PBC
     # for each frame, calculate 7 thicknesses:
@@ -250,11 +248,11 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
             cg_iter_itp['geoms']['constraint'][grp_constraint] = {'avg': None, 'hist': None}
             cg_iter_itp['geoms']['constraint'][grp_constraint]['avg'], \
             cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'] = get_CG_bonds_distrib_lipids(ns, cg_map_itp[
-                'constraint'][grp_constraint]['beads'], cg_iter_universe, ns.bins_constraints, ns.bw_constraints)
+                'constraint'][grp_constraint]['beads'], cg_iter_universe, ns.bins_constraints, ns.user_config['bw_constraints'])
             cg_iter_itp['geoms']['constraint'][grp_constraint]['emd'] = emd(
                 cg_map_itp['constraint'][grp_constraint]['hist_' + temp],
                 cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'],
-                ns.bins_constraints_dist_matrix) * ns.bonds2angles_scoring_factor
+                ns.bins_constraints_dist_matrix) * ns.user_config['bonds2angles_scoring_factor']
         except IndexError:
             sys.exit(
                 config.header_error + 'Most probably because you have constraints or constraints that exceed ' + str(
@@ -265,10 +263,10 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
             cg_iter_itp['geoms']['bond'][grp_bond] = {'avg': None, 'hist': None}
             cg_iter_itp['geoms']['bond'][grp_bond]['avg'], cg_iter_itp['geoms']['bond'][grp_bond][
                 'hist'] = get_CG_bonds_distrib_lipids(ns, cg_map_itp['bond'][grp_bond]['beads'], cg_iter_universe,
-                                                      ns.bins_bonds, ns.bw_bonds)
+                                                      ns.bins_bonds, ns.user_config['bw_bonds'])
             cg_iter_itp['geoms']['bond'][grp_bond]['emd'] = emd(cg_map_itp['bond'][grp_bond]['hist_' + temp],
                                                                 cg_iter_itp['geoms']['bond'][grp_bond]['hist'],
-                                                                ns.bins_bonds_dist_matrix) * ns.bonds2angles_scoring_factor
+                                                                ns.bins_bonds_dist_matrix) * ns.user_config['bonds2angles_scoring_factor']
         except IndexError:
             sys.exit(config.header_error + 'Most probably because you have bonds or constraints that exceed ' + str(
                 ns.bonded_max_range) + ' nm, try to increase grid size')
@@ -329,19 +327,19 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                         'geom_grp'] + ' - Δ ' + str(
                         round(cg_iter_itp['geoms']['constraint'][grp_constraint]['emd'], 2)))
 
-                ax[nrow][grp_constraint].plot(ns.bins_constraints[:-1] + ns.bw_constraints / 2,
+                ax[nrow][grp_constraint].plot(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
                                               cg_map_itp['constraint'][grp_constraint]['hist_' + temp], label='AA',
                                               color=config.atom_color[0], alpha=config.line_alpha)
-                ax[nrow][grp_constraint].fill_between(ns.bins_constraints[:-1] + ns.bw_constraints / 2,
+                ax[nrow][grp_constraint].fill_between(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
                                                       cg_map_itp['constraint'][grp_constraint]['hist_' + temp],
                                                       color=config.atom_color[0], alpha=config.fill_alpha)
                 ax[nrow][grp_constraint].plot(cg_map_itp['constraint'][grp_constraint]['avg_' + temp], 0,
                                               color=config.atom_color[0], marker='D', alpha=config.line_alpha)
 
-                ax[nrow][grp_constraint].plot(ns.bins_constraints[:-1] + ns.bw_constraints / 2,
+                ax[nrow][grp_constraint].plot(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
                                               cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'], label='CG',
                                               color=config.cg_color, alpha=config.line_alpha)
-                ax[nrow][grp_constraint].fill_between(ns.bins_constraints[:-1] + ns.bw_constraints / 2,
+                ax[nrow][grp_constraint].fill_between(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
                                                       cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'],
                                                       color=config.cg_color, alpha=config.fill_alpha)
                 ax[nrow][grp_constraint].plot(cg_iter_itp['geoms']['constraint'][grp_constraint]['avg'], 0,
@@ -362,7 +360,7 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                     if cg_map_itp['constraint'][grp_constraint]['hist_' + temp][i] != 0 or \
                             cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'][i] != 0:
                         pranges['x']['constraint'][grp_constraint][1] = ns.bins_constraints[:-1][
-                                                                            i] + ns.bw_constraints / 2
+                                                                            i] + ns.user_config['bw_constraints'] / 2
                         break
                 pranges['x_range_max']['constraint'] = max(pranges['x_range_max']['constraint'],
                                                            pranges['x']['constraint'][grp_constraint][1] -
@@ -396,19 +394,19 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                     'Bond ' + str(grp_bond + 1) + ' - Grp ' + cg_map_itp['bond'][grp_bond]['geom_grp'] + ' - Δ ' + str(
                         round(cg_iter_itp['geoms']['bond'][grp_bond]['emd'], 2)))
 
-                ax[nrow][grp_bond].plot(ns.bins_bonds[:-1] + ns.bw_bonds / 2,
+                ax[nrow][grp_bond].plot(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
                                         cg_map_itp['bond'][grp_bond]['hist_' + temp], label='AA',
                                         color=config.atom_color[0], alpha=config.line_alpha)
-                ax[nrow][grp_bond].fill_between(ns.bins_bonds[:-1] + ns.bw_bonds / 2,
+                ax[nrow][grp_bond].fill_between(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
                                                 cg_map_itp['bond'][grp_bond]['hist_' + temp],
                                                 color=config.atom_color[0], alpha=config.fill_alpha)
                 ax[nrow][grp_bond].plot(cg_map_itp['bond'][grp_bond]['avg_' + temp], 0, color=config.atom_color[0],
                                         marker='D', alpha=config.line_alpha)
 
-                ax[nrow][grp_bond].plot(ns.bins_bonds[:-1] + ns.bw_bonds / 2,
+                ax[nrow][grp_bond].plot(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
                                         cg_iter_itp['geoms']['bond'][grp_bond]['hist'], label='CG',
                                         color=config.cg_color, alpha=config.line_alpha)
-                ax[nrow][grp_bond].fill_between(ns.bins_bonds[:-1] + ns.bw_bonds / 2,
+                ax[nrow][grp_bond].fill_between(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
                                                 cg_iter_itp['geoms']['bond'][grp_bond]['hist'], color=config.cg_color,
                                                 alpha=config.fill_alpha)
                 ax[nrow][grp_bond].plot(cg_iter_itp['geoms']['bond'][grp_bond]['avg'], 0, color=config.cg_color,
@@ -428,7 +426,7 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                 for i in range(len(ns.bins_bonds[:-1]) - 1, -1, -1):  # reverse
                     if cg_map_itp['bond'][grp_bond]['hist_' + temp][i] != 0 or \
                             cg_iter_itp['geoms']['bond'][grp_bond]['hist'][i] != 0:
-                        pranges['x']['bond'][grp_bond][1] = ns.bins_bonds[:-1][i] + ns.bw_bonds / 2
+                        pranges['x']['bond'][grp_bond][1] = ns.bins_bonds[:-1][i] + ns.user_config['bw_bonds'] / 2
                         break
                 pranges['x_range_max']['bond'] = max(pranges['x_range_max']['bond'],
                                                      pranges['x']['bond'][grp_bond][1] - pranges['x']['bond'][grp_bond][
@@ -461,19 +459,19 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                     'Angle ' + str(grp_angle + 1) + ' - Grp ' + cg_map_itp['angle'][grp_angle][
                         'geom_grp'] + ' - Δ ' + str(round(cg_iter_itp['geoms']['angle'][grp_angle]['emd'], 2)))
 
-                ax[nrow][grp_angle].plot(ns.bins_angles[:-1] + ns.bw_angles / 2,
+                ax[nrow][grp_angle].plot(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
                                          cg_map_itp['angle'][grp_angle]['hist_' + temp], label='AA',
                                          color=config.atom_color[0], alpha=config.line_alpha)
-                ax[nrow][grp_angle].fill_between(ns.bins_angles[:-1] + ns.bw_angles / 2,
+                ax[nrow][grp_angle].fill_between(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
                                                  cg_map_itp['angle'][grp_angle]['hist_' + temp],
                                                  color=config.atom_color[0], alpha=config.fill_alpha)
                 ax[nrow][grp_angle].plot(cg_map_itp['angle'][grp_angle]['avg_' + temp], 0, color=config.atom_color[0],
                                          marker='D', alpha=config.line_alpha)
 
-                ax[nrow][grp_angle].plot(ns.bins_angles[:-1] + ns.bw_angles / 2,
+                ax[nrow][grp_angle].plot(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
                                          cg_iter_itp['geoms']['angle'][grp_angle]['hist'], label='CG',
                                          color=config.cg_color, alpha=config.line_alpha)
-                ax[nrow][grp_angle].fill_between(ns.bins_angles[:-1] + ns.bw_angles / 2,
+                ax[nrow][grp_angle].fill_between(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
                                                  cg_iter_itp['geoms']['angle'][grp_angle]['hist'],
                                                  color=config.cg_color, alpha=config.fill_alpha)
                 ax[nrow][grp_angle].plot(cg_iter_itp['geoms']['angle'][grp_angle]['avg'], 0, color=config.cg_color,
@@ -492,7 +490,7 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                 for i in range(len(ns.bins_angles[:-1]) - 1, -1, -1):  # reverse
                     if cg_map_itp['angle'][grp_angle]['hist_' + temp][i] != 0 or \
                             cg_iter_itp['geoms']['angle'][grp_angle]['hist'][i] != 0:
-                        pranges['x']['angle'][grp_angle][1] = ns.bins_angles[:-1][i] + ns.bw_angles / 2
+                        pranges['x']['angle'][grp_angle][1] = ns.bins_angles[:-1][i] + ns.user_config['bw_angles'] / 2
                         break
                 pranges['x_range_max']['angle'] = max(pranges['x_range_max']['angle'],
                                                       pranges['x']['angle'][grp_angle][1] -
@@ -591,8 +589,8 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
         ag1 = cg_iter_universe.atoms[ns.cg_itps[lipid_code]['rdf_pairs'][pair_type][0]]
         ag2 = cg_iter_universe.atoms[ns.cg_itps[lipid_code]['rdf_pairs'][pair_type][1]]
 
-        irdf_short = rdf.InterRDF(ag1, ag2, nbins=round(ns.cut_rdfs_short / ns.bw_rdfs),
-                                  range=(0, ns.cut_rdfs_short * 10), exclusion_block=(
+        irdf_short = rdf.InterRDF(ag1, ag2, nbins=round(ns.user_config['cutoff_rdfs'] / ns.user_config['bw_rdfs']),
+                                  range=(0, ns.user_config['cutoff_rdfs'] * 10), exclusion_block=(
             len(ns.cg_itps[lipid_code]['beads_ids_per_beads_types_sing'][bead_type_1]),
             len(ns.cg_itps[lipid_code]['beads_ids_per_beads_types_sing'][bead_type_2])))
 
@@ -675,21 +673,21 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                     hist_CG_display = cg_eval_rdfs_short[pair_type][1] / (
                                 (np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
 
-                    ax[i][j].plot(ns.bins_vol_shell - ns.bw_rdfs / 2, hist_AA_display, label='AA',
+                    ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_AA_display, label='AA',
                                   alpha=config.rdf_alpha, color=config.atom_color[0])  # aa ref
-                    ax[i][j].plot(ns.bins_vol_shell - ns.bw_rdfs / 2, hist_CG_display, label='CG',
+                    ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_CG_display, label='CG',
                                   alpha=config.rdf_alpha, color=config.cg_color)  # cg for this eval
                 else:
                     ax[i][j].plot(0, 0, label='SIM. CRASHED')
 
                 # display the sum of radii
-                if ns.tune_radii:
-                    sig = ns.user_config.init_beads_radii[ns.reverse_radii_mapping[bead_type_1]] + ns.user_config.init_beads_radii[ns.reverse_radii_mapping[bead_type_2]]
+                if ns.user_config['tune_radii']:
+                    sig = ns.user_config['init_beads_radii'][ns.reverse_radii_mapping[bead_type_1]] + ns.user_config['init_beads_radii'][ns.reverse_radii_mapping[bead_type_2]]
                 else:
-                    sig = ns.user_config.init_nonbonded[pair_type.replace('_', ' ')]['sig']  # pre-defined SIG in config
+                    sig = ns.user_config['init_nonbonded'][pair_type.replace('_', ' ')]['sig']  # pre-defined SIG in config
                 ax[i][j].axvline(sig, label='Sig', ls='dashed', color='black', alpha=0.5)
 
-                ax[i][j].set_xlim(0, ns.cut_rdfs_short)
+                ax[i][j].set_xlim(0, ns.user_config['cutoff_rdfs'])
                 ax[i][j].set_title(
                     bead_type_1 + ' ' + bead_type_2 + ' - RDF Δ ' + str(round(cg_iter_itp['rdfs_short'][pair_type], 2)))
                 ax[i][j].grid()
@@ -701,7 +699,7 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
         round(delta_rdfs, 2)) + ' -- APL: ' + str(round(cg_iter_itp['apl']['avg'], 2)) + ' -- Dhh: ' + str(
         round(cg_iter_itp['Dhh']['avg'], 2)))
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.savefig('RDF_SHELL_NORM_' + lipid_code + '_' + temp + '_cutoff_' + str(ns.cut_rdfs_short) + '_nm.png')
+    plt.savefig('RDF_SHELL_NORM_' + lipid_code + '_' + temp + '_cutoff_' + str(ns.user_config['cutoff_rdfs']) + '_nm.png')
     plt.close(fig)
 
     # RDF plots at short cutoff = 1.5 nm
@@ -722,18 +720,18 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                     hist_CG_display = cg_eval_rdfs_short[pair_type][1] / (
                                 (np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
 
-                    ax[i][j].plot(ns.bins_vol_shell - ns.bw_rdfs / 2, hist_AA_display, label='AA',
+                    ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_AA_display, label='AA',
                                   alpha=config.rdf_alpha, color=config.atom_color[0])  # aa ref
-                    ax[i][j].plot(ns.bins_vol_shell - ns.bw_rdfs / 2, hist_CG_display, label='CG',
+                    ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_CG_display, label='CG',
                                   alpha=config.rdf_alpha, color=config.cg_color)  # cg for this eval
                 else:
                     ax[i][j].plot(0, 0, label='SIM. CRASHED')
 
                 # display the sum of radii
-                if ns.tune_radii:
-                    sig = ns.user_config.init_beads_radii[ns.reverse_radii_mapping[bead_type_1]] + ns.user_config.init_beads_radii[ns.reverse_radii_mapping[bead_type_2]]
+                if ns.user_config['tune_radii']:
+                    sig = ns.user_config['init_beads_radii'][ns.reverse_radii_mapping[bead_type_1]] + ns.user_config['init_beads_radii'][ns.reverse_radii_mapping[bead_type_2]]
                 else:
-                    sig = ns.user_config.init_nonbonded[pair_type.replace('_', ' ')]['sig']  # pre-defined SIG in config
+                    sig = ns.user_config['init_nonbonded'][pair_type.replace('_', ' ')]['sig']  # pre-defined SIG in config
                 ax[i][j].axvline(sig, label='Sig', ls='dashed', color='black', alpha=0.5)
 
                 ax[i][j].set_xlim(0, 1.5)

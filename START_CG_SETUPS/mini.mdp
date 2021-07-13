@@ -2,7 +2,7 @@
 integrator               = steep
 ; Start time and timestep in ps
 tinit                    = 0.0
-nsteps                   = 15000 ; 5ns @ 10fs = 500000 ; 2ns @ 10fs = 200000
+nsteps                   = 5000 ; 5ns @ 10fs = 500000 ; 2ns @ 10fs = 200000
 ; For exact run continuation or redoing part of a run
 init-step                = 0
 ; Part index is updated automatically on checkpointing (keeps files separate)

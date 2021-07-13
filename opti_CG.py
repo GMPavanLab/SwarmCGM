@@ -183,7 +183,7 @@ def read_cg_itp_file_grp_comments(ns, itp_lines):
 					bead_id, bead_type, resnr, residue, atom, cgnr, charge = sp_itp_line[:7]
 					ns.nb_beads_itp = max(ns.nb_beads_itp, int(bead_id))
 					# NOTE: masses are taken from the config and if there are some in the ITP they are ignored
-					ns.cg_itp['atoms'].append({'bead_id': int(bead_id)-1, 'bead_type': bead_type, 'resnr': int(resnr), 'residue': residue, 'atom': atom, 'cgnr': int(cgnr), 'charge': float(charge), 'mass': ns.beads_masses[bead_type]}) # retrieve indexing from 0 for CG beads IDS for MDAnalysis
+					ns.cg_itp['atoms'].append({'bead_id': int(bead_id)-1, 'bead_type': bead_type, 'resnr': int(resnr), 'residue': residue, 'atom': atom, 'cgnr': int(cgnr), 'charge': float(charge), 'mass': ns.user_config['beads_masses'][bead_type]})  # retrieve indexing from 0 for CG beads IDS for MDAnalysis
 
 					# record beads ids per beads types, for later RDF calculation
 					if bead_type in ns.cg_itp['beads_ids_per_beads_types_sing']:
@@ -409,7 +409,7 @@ def get_beads_MDA_atomgroups(ns, aa_universe):
 	mda_beads_atom_grps, mda_weights_atom_grps = dict(), dict()
 	for bead_id in ns.atom_w:
 
-		if ns.map_center == 'COM':
+		if ns.user_config['map_center'] == 'COM':
 			# print('Created bead_id', bead_id, 'using atoms', [atom_id for atom_id in ns.all_beads[bead_id]['atoms_id']])
 			# print('and weights:\n', [ns.atom_w[bead_id][i] * aa_universe.atoms[ns.all_beads[bead_id]['atoms_id'][i]].mass for i in range(len(ns.all_beads[bead_id]['atoms_id']))])
 			# print()
@@ -417,7 +417,7 @@ def get_beads_MDA_atomgroups(ns, aa_universe):
 			mda_weights_atom_grps[bead_id] = np.array([ns.atom_w[bead_id][i] * aa_universe.atoms[ns.all_beads[bead_id]['atoms_id'][i]].mass for i in range(len(ns.all_beads[bead_id]['atoms_id']))])
 			# mda_weights_atom_grps[bead_id] = np.array([ns.atom_w[bead_id][atom_id]*ns.all_atoms[atom_id]['atom_mass'] for atom_id in ns.atom_w[bead_id]])
 
-		elif ns.map_center == 'COG':
+		elif ns.user_config['map_center'] == 'COG':
 			mda_beads_atom_grps[bead_id] = mda.AtomGroup([atom_id for atom_id in ns.all_beads[bead_id]['atoms_id']], aa_universe)
 			mda_weights_atom_grps[bead_id] = np.array([1 for _ in ns.all_beads[bead_id]['atoms_id']])
 
@@ -444,31 +444,28 @@ def get_search_space_boundaries(ns):
 
 	# print('Setting search space boundaries')
 	nb_LJ = 0
+	for param in ns.all_params_opti:  # list of dict having unique keys
+		param_short = param.split('_')[0]
 
-	for param_dict in ns.all_params_opti:  # list of dict having unique keys
-		for param in param_dict:  # accessing each single key of each dict
+		# bonds, tune both value and force constants
+		if param.startswith('B') and param.endswith('val'):
+			search_space_boundaries.extend([ns.params_val[param_short]['range']])
+		elif param.startswith('B') and param.endswith('fct'):
+			search_space_boundaries.extend([[ns.user_config['min_fct_bonds'], ns.user_config['max_fct_bonds']]])
 
-			# bonds, tune both value and force constants
-			if param.startswith('B') and ns.tune_geoms:
-				if param_dict[param] == 2:
-					search_space_boundaries.extend([ns.params_val[param]['range']])  # val
-				search_space_boundaries.extend([[ns.user_config.min_fct_bonds, ns.user_config.max_fct_bonds]])  # fct
+		elif param.startswith('A') and param.endswith('val'):
+			search_space_boundaries.extend([ns.params_val[param_short]['range']])
+		elif param.startswith('A') and param.endswith('fct'):
+			search_space_boundaries.extend([[ns.user_config['min_fct_angles'], ns.user_config['max_fct_angles']]])
 
-			# angles, tune either: (1) both value and force constants or (2) fct only if angle was initially set to 90°, 120° or 180°
-			elif param.startswith('A') and ns.tune_geoms:
-				if param_dict[param] == 2:
-					search_space_boundaries.extend([ns.params_val[param]['range']])  # val
-				search_space_boundaries.extend([[ns.user_config.min_fct_angles, ns.user_config.max_fct_angles]])  # fct
-
-			elif param.startswith('r_'):  # now it's bead radius that we tune for each bead type
-				search_space_boundaries.extend([[ns.user_config.min_radius, ns.user_config.max_radius]])
-
-			elif param.startswith('LJ') and ns.tune_eps:
-				if ns.eps_perc_range == None and ns.eps_flat_range == None:
-					search_space_boundaries.extend([[ns.user_config.min_epsilon, ns.user_config.max_epsilon]])
-				else:
-					search_space_boundaries.extend([ns.eps_ranges[nb_LJ]])
-					nb_LJ += 1
+		elif param.startswith('r_'):  # bead radius that we tune for each bead type or per group of bead types
+			search_space_boundaries.extend([[ns.user_config['min_radius'], ns.user_config['max_radius']]])
+		elif param.startswith('LJ'):
+			if ns.user_config['min_max_epsilon_relative_range'] == 'None':
+				search_space_boundaries.extend([[ns.user_config['min_epsilon'], ns.user_config['max_epsilon']]])
+			else:
+				search_space_boundaries.extend([ns.eps_relative_ranges[nb_LJ]])
+				nb_LJ += 1
 
 	return search_space_boundaries
 
@@ -518,18 +515,18 @@ def get_cycle_restart_guess_list(ns):
 			if param.startswith('B') and ns.tune_geoms:
 				if param_dict[param] == 2:
 					input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'], ns.params_val[param]['range'][0]), ns.params_val[param]['range'][1]))  # val
-				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'], ns.user_config.min_fct_bonds), ns.user_config.max_fct_bonds))  # fct
+				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'], ns.user_config['min_fct_bonds']), ns.user_config['max_fct_bonds']))  # fct
 
 			elif param.startswith('A') and ns.tune_geoms:
 				if param_dict[param] == 2:
 					input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'], ns.params_val[param]['range'][0]), ns.params_val[param]['range'][1]))  # val
-				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'], ns.user_config.min_fct_angles), ns.user_config.max_fct_angles))  # fct
+				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'], ns.user_config['min_fct_angles']), ns.user_config['max_fct_angles']))  # fct
 
 			elif param.startswith('r_'):
-				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][param], ns.user_config.min_radius), ns.user_config.max_radius))
+				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][param], ns.user_config['min_radius']), ns.user_config['max_radius']))
 
-			elif param.startswith('LJ') and ns.tune_eps:
-				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][param], ns.user_config.min_epsilon), ns.user_config.max_epsilon))
+			elif param.startswith('LJ'):
+				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][param], ns.user_config['min_epsilon']), ns.user_config['max_epsilon']))
 
 	cycle_restart_guess_list.append(input_guess)
 
@@ -546,31 +543,31 @@ def get_cycle_restart_guess_list(ns):
 						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] - config.bond_value_guess_variation, ns.params_val[param]['range'][0])
 						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] + config.bond_value_guess_variation, ns.params_val[param]['range'][1])
 						input_guess.append(draw_float(draw_low, draw_high, 3))  # val
-					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] - config.bond_fct_guess_variation, ns.user_config.min_fct_bonds)
-					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] + config.bond_fct_guess_variation, ns.user_config.max_fct_bonds)
+					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] - config.bond_fct_guess_variation, ns.user_config['min_fct_bonds'])
+					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] + config.bond_fct_guess_variation, ns.user_config['max_fct_bonds'])
 					input_guess.append(draw_float(draw_low, draw_high, 3))  # fct
 
 				elif param.startswith('A') and ns.tune_geoms:
 					if param_dict[param] == 2:
-						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] - config.angle_value_guess_variation, ns.params_val[param]['range'][0])
-						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] + config.angle_value_guess_variation, ns.params_val[param]['range'][1])
+						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param]['range'][0])
+						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param]['range'][1])
 						input_guess.append(draw_float(draw_low, draw_high, 3))  # val
-					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] - config.angle_fct_guess_variation, ns.user_config.min_fct_angles)
-					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] + config.angle_fct_guess_variation, ns.user_config.max_fct_angles)
+					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] - ns.user_config['angle_fct_guess_variation'], ns.user_config['min_fct_angles'])
+					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] + ns.user_config['angle_fct_guess_variation'], ns.user_config['max_fct_angles'])
 					input_guess.append(draw_float(draw_low, draw_high, 3))  # fct
 
 				elif param.startswith('r_'):
-					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][param] - config.radius_guess_variation, ns.user_config.min_radius)
-					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][param] + config.radius_guess_variation, ns.user_config.max_radius)
+					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][param] - ns.user_config['radius_guess_variation'], ns.user_config['min_radius'])
+					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][param] + ns.user_config['radius_guess_variation'], ns.user_config['max_radius'])
 					input_guess.append(draw_float(draw_low, draw_high, 3))  # radius
 
-				elif param.startswith('LJ') and ns.tune_eps:
-					if ns.eps_perc_range is None and ns.eps_flat_range is None:  # EPS ranges according to config file values
-						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][param] - config.eps_guess_variation, ns.user_config.min_epsilon)
-						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][param] + config.eps_guess_variation, ns.user_config.max_epsilon)
+				elif param.startswith('LJ'):
+					if ns.user_config['min_max_epsilon_relative_range'] == 'None':  # EPS ranges according to config file values
+						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][param] - ns.user_config['epsilon_guess_variation'], ns.user_config['min_epsilon'])
+						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][param] + ns.user_config['epsilon_guess_variation'], ns.user_config['max_epsilon'])
 					else:  # EPS ranges according to either flat or perc around starting values OF THE VERY FIRST OPTI CYCLE
-						draw_low = ns.eps_ranges[nb_LJ][0]
-						draw_high = ns.eps_ranges[nb_LJ][1]
+						draw_low = ns.eps_relative_ranges[nb_LJ][0]
+						draw_high = ns.eps_relative_ranges[nb_LJ][1]
 					input_guess.append(draw_float(draw_low, draw_high, 3))  # eps
 					nb_LJ += 1
 
@@ -587,33 +584,28 @@ def get_initial_guess_list(ns):
 	# initialize first particle
 	input_guess = []
 	nb_LJ = 0  # to find ordered LJ pairs within ns.all_params_opti when geoms+LJ are present
-	for param_dict in ns.all_params_opti:  # list of dict having unique keys
-		for param in param_dict:  # accessing each single key of each dict
+	for param in ns.all_params_opti:  # list of dict having unique keys
+		param_short = param.split('_')[0]
 
-			# bonds, tune both value and force constants
-			if param.startswith('B') and ns.tune_geoms:
-				if param_dict[param] == 2:
-					if ns.bonds_equi_val_from_config and ns.n_cycle == 1:
-						input_guess.append(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['val'])  # val
-					else:
-						input_guess.append(ns.params_val[param]['avg'])  # val
-				input_guess.append(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['fct'])  # fct
+		if param.startswith('B') and param.endswith('val'):
+			input_guess.append(ns.params_val[param_short]['avg'])
+		elif param.startswith('B') and param.endswith('fct'):
+			input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
 
-			# angles, tune either: (1) both value and force constants or (2) fct only if angle was initially set to 90°, 120° or 180°
-			elif param.startswith('A') and ns.tune_geoms:
-				if param_dict[param] == 2:
-					input_guess.append(ns.params_val[param]['avg'])  # val
-				input_guess.append(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['fct'])  # fct
+		elif param.startswith('A') and param.endswith('val'):
+			input_guess.append(ns.params_val[param_short]['avg'])
+		elif param.startswith('A') and param.endswith('fct'):
+			input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
 
-			elif param.startswith('r_'):
-				radii_grp = param.split('_')[1]
-				r_default = ns.user_config.init_beads_radii[radii_grp]
-				input_guess.append(r_default)
+		elif param.startswith('r_'):
+			radii_grp = param.split('_')[1]
+			r_default = ns.user_config['init_beads_radii'][radii_grp]
+			input_guess.append(r_default)
 
-			elif param.startswith('LJ') and ns.tune_eps:
-				eps_default = ns.user_config.init_nonbonded[' '.join(ns.all_beads_pairs[nb_LJ])]['eps'] # get initial LJ from existing FF data
-				input_guess.append(eps_default)
-				nb_LJ += 1
+		elif param.startswith('LJ'):
+			eps_default = ns.user_config['init_nonbonded'][' '.join(ns.all_beads_pairs[nb_LJ])]['eps']  # get initial LJ from existing FF data
+			input_guess.append(eps_default)
+			nb_LJ += 1
 
 	initial_guess_list.append(input_guess)
 
@@ -625,67 +617,49 @@ def get_initial_guess_list(ns):
 
 		input_guess = []
 		nb_LJ = 0
-		for param_dict in ns.all_params_opti: # list of dict having unique keys
-			for param in param_dict: # accessing each single key of each dict
+		for param in ns.all_params_opti:  # list of dict having unique keys
+			param_short = param.split('_')[0]
 
-				# bonds, tune both value and force constants
-				if param.startswith('B') and ns.tune_geoms:
+			# bonds, tune both value and force constants
+			if param.startswith('B') and param.endswith('val'):
+				draw_low = max(ns.params_val[param_short]['avg'] - ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][0])
+				draw_high = min(ns.params_val[param_short]['avg'] + ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				input_guess.append(draw_float(draw_low, draw_high, 3))
+			elif param.startswith('B') and param.endswith('fct'):
+				draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['bond_fct_guess_variation'], ns.user_config['min_fct_bonds'])
+				draw_high = min(ns.user_config['init_bonded'][param_short]['fct'] + ns.user_config['bond_fct_guess_variation'], ns.user_config['max_fct_bonds'])
+				input_guess.append(draw_float(draw_low, draw_high, 3))
 
-					if param_dict[param] == 2:
-						if ns.bonds_equi_val_from_config and ns.n_cycle == 1:
-							draw_low = max(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['val'] - config.bond_value_guess_variation, ns.params_val[param]['range'][0])
-							draw_high = min(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['val'] + config.bond_value_guess_variation, ns.params_val[param]['range'][1])
-							input_guess.append(draw_float(draw_low, draw_high, 3)) # val
-						else:
-							draw_low = max(ns.params_val[param]['avg'] - config.bond_value_guess_variation, ns.params_val[param]['range'][0])
-							draw_high = min(ns.params_val[param]['avg'] + config.bond_value_guess_variation, ns.params_val[param]['range'][1])
-							input_guess.append(draw_float(draw_low, draw_high, 3)) # val
+			elif param.startswith('A') and param.endswith('val'):
+				draw_low = max(ns.params_val[param_short]['avg'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][0])
+				draw_high = min(ns.params_val[param_short]['avg'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				input_guess.append(draw_float(draw_low, draw_high, 3))
+			elif param.startswith('A') and param.endswith('fct'):
+				draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['angle_fct_guess_variation'], ns.user_config['min_fct_angles'])
+				draw_high = min(ns.user_config['init_bonded'][param_short]['fct'] + ns.user_config['angle_fct_guess_variation'], ns.user_config['max_fct_angles'])
+				input_guess.append(draw_float(draw_low, draw_high, 3))
 
-					draw_low = max(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['fct'] - config.bond_fct_guess_variation, ns.user_config.min_fct_bonds)
-					draw_high = min(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['fct'] + config.bond_fct_guess_variation, ns.user_config.max_fct_bonds)
+			elif param.startswith('r_'):
+				radii_grp = param.split('_')[1]
+				r_default = ns.user_config['init_beads_radii'][radii_grp]
+				draw_low = max(r_default - ns.user_config['radius_guess_variation'], ns.user_config['min_radius'])
+				draw_high = min(r_default + ns.user_config['radius_guess_variation'], ns.user_config['max_radius'])
+				input_guess.append(draw_float(draw_low, draw_high, 3))
 
-					input_guess.append(draw_float(draw_low, draw_high, 3)) # fct
+			elif param.startswith('LJ'):
+				eps_default = ns.user_config['init_nonbonded'][' '.join(ns.all_beads_pairs[nb_LJ])]['eps']
 
-				# angles, tune either: (1) both value and force constants or (2) fct only if angle was initially set to 90°, 120° or 180°
-				elif param.startswith('A') and ns.tune_geoms:
+				# EPS ranges according to config file values
+				if ns.user_config['min_max_epsilon_relative_range'] == 'None':
+					draw_low = max(eps_default - ns.user_config['epsilon_guess_variation'], ns.user_config['min_epsilon'])
+					draw_high = min(eps_default + ns.user_config['epsilon_guess_variation'], ns.user_config['max_epsilon'])
+				# EPS ranges according to max range around starting values
+				else:
+					draw_low = ns.eps_relative_ranges[nb_LJ][0]
+					draw_high = ns.eps_relative_ranges[nb_LJ][1]
+				input_guess.append(draw_float(draw_low, draw_high, 3))
 
-					if param_dict[param] == 2:
-						draw_low = max(ns.params_val[param]['avg'] - config.angle_value_guess_variation, ns.params_val[param]['range'][0])
-						draw_high = min(ns.params_val[param]['avg'] + config.angle_value_guess_variation, ns.params_val[param]['range'][1])
-						input_guess.append(draw_float(draw_low, draw_high, 3)) # val
-
-					draw_low = max(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['fct'] - config.angle_fct_guess_variation, ns.user_config.min_fct_angles)
-					draw_high = min(ns.opti_config.init_bonded[ns.mapping_type][ns.solv][param]['fct'] + config.angle_fct_guess_variation, ns.user_config.max_fct_angles)
-
-					input_guess.append(draw_float(draw_low, draw_high, 3)) # fct
-
-				elif param.startswith('r_'):
-
-					radii_grp = param.split('_')[1]
-					r_default = ns.user_config.init_beads_radii[radii_grp] # got actualized with best previous result at end of opti cycle
-
-					# random variations in config defined range
-					draw_low = max(r_default-config.radius_guess_variation, ns.user_config.min_radius)
-					draw_high = min(r_default+config.radius_guess_variation, ns.user_config.max_radius)
-
-					input_guess.append(draw_float(draw_low, draw_high, 3)) # radius
-
-				elif param.startswith('LJ') and ns.tune_eps:
-
-					eps_default = ns.user_config.init_nonbonded[' '.join(ns.all_beads_pairs[nb_LJ])]['eps']  # get initial LJ from existing FF data -- got actualized with best previous result at end of opti cycle
-
-					# EPS ranges according to config file values
-					if ns.eps_perc_range is None and ns.eps_flat_range is None:
-						draw_low = max(eps_default - config.eps_guess_variation, ns.user_config.min_epsilon)
-						draw_high = min(eps_default + config.eps_guess_variation, ns.user_config.max_epsilon)
-					# EPS ranges according to either flat or perc around starting values
-					else:
-						draw_low = ns.eps_ranges[nb_LJ][0]
-						draw_high = ns.eps_ranges[nb_LJ][1]
-
-					input_guess.append(draw_float(draw_low, draw_high, 3)) # EPS
-
-					nb_LJ += 1
+				nb_LJ += 1
 
 		initial_guess_list.append(input_guess) # register new particle, built during this loop
 
@@ -708,9 +682,9 @@ def create_bins_and_dist_matrices(ns, constraints=True):
 
 	# bins for histogram distributions of bonds/angles
 	if constraints:
-		ns.bins_constraints = np.arange(0, ns.bonded_max_range+ns.bw_constraints, ns.bw_constraints)
-	ns.bins_bonds = np.arange(0, ns.bonded_max_range+ns.bw_bonds, ns.bw_bonds)
-	ns.bins_angles = np.arange(0, 180+2*ns.bw_angles, ns.bw_angles) # one more bin for angle/dihedral because we are later using a strict inferior for bins definitions
+		ns.bins_constraints = np.arange(0, ns.user_config['bonds_max_range'] + ns.user_config['bw_constraints'], ns.user_config['bw_constraints'])
+	ns.bins_bonds = np.arange(0, ns.user_config['bonds_max_range'] + ns.user_config['bw_bonds'], ns.user_config['bw_bonds'])
+	ns.bins_angles = np.arange(0, 180 + 2 * ns.user_config['bw_angles'], ns.user_config['bw_angles'])  # one more bin for angle/dihedral because we are later using a strict inferior for bins definitions
 	# ns.bins_dihedrals = np.arange(-180, 180+2*ns.bw_dihedrals, ns.bw_dihedrals)
 
 	# bins distance for Earth Mover's Distance (EMD) to calculate histograms similarity
@@ -726,7 +700,7 @@ def create_bins_and_dist_matrices(ns, constraints=True):
 	# ns.bins_dihedrals_dist_matrix = np.where(bins_dihedrals_dist_matrix > max(bins_dihedrals_dist_matrix[0])/2, max(bins_dihedrals_dist_matrix[0])-bins_dihedrals_dist_matrix, bins_dihedrals_dist_matrix) # periodic distance matrix
 
 	# RDFs
-	ns.bins_vol_shell = np.arange(ns.bw_rdfs, ns.cut_rdfs_short + ns.bw_rdfs, ns.bw_rdfs)
+	ns.bins_vol_shell = np.arange(ns.user_config['bw_rdfs'], ns.user_config['cutoff_rdfs'] + ns.user_config['bw_rdfs'], ns.user_config['bw_rdfs'])
 
 	# volume of the radial shell
 	vol_real = 4/3.0 * np.pi * np.power(ns.bins_vol_shell, 3)
@@ -772,9 +746,9 @@ def initialize_cg_traj(ns):
 
 def map_aa2cg_traj(ns, aa_universe, aa2cg_universe, mda_beads_atom_grps, mda_weights_atom_grps):
 
-	if ns.map_center == 'COM':
+	if ns.user_config['map_center'] == 'COM':
 		print('    Interpretation: Center of Mass (COM)')
-	elif ns.map_center == 'COG':
+	elif ns.user_config['map_center'] == 'COG':
 		print('    Interpretation: Center of Geometry (COG)')
 
 	# regular beads are mapped using center of mass of groups of atoms
@@ -875,13 +849,13 @@ def get_AA_bonds_distrib(ns, beads_ids, grp_type, uni):
 			bead_pos_2[i] = uni.atoms[bead_id_2].position
 
 		mda.lib.distances.calc_bonds(bead_pos_1, bead_pos_2, backend=ns.mda_backend, box=None, result=frame_values)
-		bond_values[len(beads_ids)*ts.frame:len(beads_ids)*(ts.frame+1)] = frame_values / 10 # retrieved nm
+		bond_values[len(beads_ids)*ts.frame:len(beads_ids)*(ts.frame+1)] = frame_values / 10  # retrieved nm
 
 	bond_avg = round(np.average(bond_values), 3)
 	if grp_type == 'constraint':
-		bond_hist = np.histogram(bond_values, ns.bins_constraints, density=True)[0] * ns.bw_constraints  # retrieve 1-sum densities
+		bond_hist = np.histogram(bond_values, ns.bins_constraints, density=True)[0] * ns.user_config['bw_constraints']  # retrieve 1-sum densities
 	elif grp_type == 'bond':
-		bond_hist = np.histogram(bond_values, ns.bins_bonds, density=True)[0] * ns.bw_bonds  # retrieve 1-sum densities
+		bond_hist = np.histogram(bond_values, ns.bins_bonds, density=True)[0] * ns.user_config['bw_bonds']  # retrieve 1-sum densities
 	else:
 		sys.exit('Coding error get_AA_bonds_distrib')
 
@@ -910,6 +884,6 @@ def get_AA_angles_distrib(ns, beads_ids, uni):
 
 	angle_values_deg = np.rad2deg(angle_values_rad)
 	angle_avg = round(np.mean(angle_values_deg), 3)
-	angle_hist = np.histogram(angle_values_deg, ns.bins_angles, density=True)[0]*ns.bw_angles # retrieve 1-sum densities
+	angle_hist = np.histogram(angle_values_deg, ns.bins_angles, density=True)[0] * ns.user_config['bw_angles']  # retrieve 1-sum densities
 
 	return angle_avg, angle_hist, angle_values_deg

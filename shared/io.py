@@ -37,7 +37,7 @@ def print_mdp_file(ns, mdp_filename_in, mdp_filename_out, sim_type, temp=None):
                 if sim_type == 'prod':
                     sim_steps = str(round(ns.prod_sim_time * 1000 / dt))
                 elif sim_type == 'equi':
-                    sim_steps = str(round(ns.user_config.cg_time_equi * 1000 / dt))
+                    sim_steps = str(round(ns.user_config['cg_time_equi'] * 1000 / dt))
                 mdp_lines_in[i] = mdp_line.replace('PLACEHOLDER', sim_steps) + '    ; automatically modified'
             if mdp_line.startswith('nstxout-compressed'):
                 xtc_write_freq = str(round(ns.cg_sampling / dt))
@@ -64,7 +64,7 @@ def print_mdp_file(ns, mdp_filename_in, mdp_filename_out, sim_type, temp=None):
 def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
 
     # enter simulation directory for lipid + temperature
-    os.chdir(f'{ns.exec_folder}/{config.iteration_sim_files_dirname}{nb_eval_particle}/{lipid_code}_{temp}')
+    os.chdir(f"{ns.user_config['exec_folder']}/{config.iteration_sim_files_dirname}{nb_eval_particle}/{lipid_code}_{temp}")
 
     sim_status = swarm_res[nb_eval_particle][lipid_code][temp]['status']
     score_part = swarm_res[nb_eval_particle][lipid_code][temp]['score_part']
@@ -78,7 +78,7 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
 
         with open('../../' + ns.opti_moves_details_lipid_temp_file, 'a') as fp:
 
-            if config.exp_data[lipid_code][temp]['apl'] is not None:
+            if ns.user_config['exp_data'][lipid_code][temp]['apl'] is not None:
                 str_delta_apl = str(round(score_part['delta_apl'], 4))
                 str_perc_delta_apl_real = str(round(score_part['perc_delta_apl_real'], 4))
                 str_perc_delta_apl_adapt = str(round(score_part['perc_delta_apl_adapt'], 4))
@@ -98,7 +98,7 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
                       round(score_part['cg_apl']['avg'], 3),
                       '+/-', str(round(score_part['cg_apl']['std'], 3)) + ')')
 
-            if config.exp_data[lipid_code][temp]['Dhh'] is not None:
+            if ns.user_config['exp_data'][lipid_code][temp]['Dhh'] is not None:
                 str_delta_thick = str(round(score_part['delta_thick'], 4))
                 str_perc_delta_thick_real = str(round(score_part['perc_delta_thick_real'], 4))
                 str_perc_delta_thick_adapt = str(round(score_part['perc_delta_thick_adapt'], 4))
@@ -126,9 +126,9 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
 
             fp.write(str(ns.n_cycle) + ' ' + str(ns.n_swarm_iter) + ' ' + str(nb_eval_particle) + ' ' + lipid_code + ' ' + temp + ' ' + str(
                 round(score_part['cg_apl']['avg'], 4)) + ' ' + str(
-                config.exp_data[lipid_code][temp]['apl']) + ' ' + str_delta_apl + ' ' + str(
+                ns.user_config['exp_data'][lipid_code][temp]['apl']) + ' ' + str_delta_apl + ' ' + str(
                 round(score_part['cg_thick']['avg'], 4)) + ' ' + str(
-                config.exp_data[lipid_code][temp]['Dhh']) + ' ' + str_delta_thick + ' ' + str(
+                ns.user_config['exp_data'][lipid_code][temp]['Dhh']) + ' ' + str_delta_thick + ' ' + str(
                 round(score_part['area_compress'], 1)) + ' ' + str(round(score_part['perc_delta_geoms'],
                                                                          4)) + ' ' + str_perc_delta_apl_real + ' ' + str_perc_delta_apl_adapt + ' ' + str_perc_delta_thick_real + ' ' + str_perc_delta_thick_adapt + ' ' + str(
                 round(score_part['perc_delta_rdfs'], 4)) + '\n')
@@ -159,47 +159,32 @@ def update_cg_itp_obj(ns, parameters_set):
     current_cg_itps = copy.deepcopy(ns.cg_itps)
 
     param_cursor = 0
-    for param_dict in ns.all_params_opti:  # list of dict having unique keys
-        for param in param_dict:  # accessing each single key of each dict
+    for param in ns.all_params_opti:  # list of dict having unique keys
+        param_short = param.split('_')[0]
 
-            # bonds, tune both value and force constants
-            if param.startswith('B') and ns.tune_geoms:
+        if param.startswith('B') and param.endswith('val'):
+            for lipid_code in ns.all_bonds_types[param_short]:
+                for bond_id in ns.all_bonds_types[param_short][lipid_code]:
+                    current_cg_itps[lipid_code]['bond'][bond_id]['value'] = round(parameters_set[param_cursor], 3)
+            param_cursor += 1
 
-                if param_dict[param] == 1:
-                    for lipid_code in ns.all_bonds_types[param]:
-                        for bond_id in ns.all_bonds_types[param][lipid_code]:
-                            current_cg_itps[lipid_code]['bond'][bond_id]['fct'] = round(parameters_set[param_cursor],
-                                                                                        2)  # removed param_cursor+1 to tune force constants only for bonds
-                    param_cursor += 1  # changed to tune force constants only for bonds
+        elif param.startswith('B') and param.endswith('fct'):
+            for lipid_code in ns.all_bonds_types[param_short]:
+                for bond_id in ns.all_bonds_types[param_short][lipid_code]:
+                    current_cg_itps[lipid_code]['bond'][bond_id]['fct'] = round(parameters_set[param_cursor], 2)
+            param_cursor += 1
 
-                elif param_dict[param] == 2:
-                    for lipid_code in ns.all_bonds_types[param]:
-                        for bond_id in ns.all_bonds_types[param][lipid_code]:
-                            current_cg_itps[lipid_code]['bond'][bond_id]['value'] = round(parameters_set[param_cursor],
-                                                                                          3)  # removed to tune force constants only for bonds
-                            current_cg_itps[lipid_code]['bond'][bond_id]['fct'] = round(
-                                parameters_set[param_cursor + 1],
-                                2)  # removed param_cursor+1 to tune force constants only for bonds
-                    param_cursor += 2  # changed to tune force constants only for bonds
+        elif param.startswith('A') and param.endswith('val'):
+            for lipid_code in ns.all_angles_types[param_short]:
+                for angle_id in ns.all_angles_types[param_short][lipid_code]:
+                    current_cg_itps[lipid_code]['angle'][angle_id]['value'] = round(parameters_set[param_cursor], 3)
+            param_cursor += 1
 
-            # angles, tune either: (1) both value and force constants or (2) fct only if angle was initially set to 90°, 120° or 180°
-            elif param.startswith('A') and ns.tune_geoms:
-
-                if param_dict[param] == 1:
-                    for lipid_code in ns.all_angles_types[param]:
-                        for angle_id in ns.all_angles_types[param][lipid_code]:
-                            current_cg_itps[lipid_code]['angle'][angle_id]['fct'] = round(parameters_set[param_cursor],
-                                                                                          2)
-                    param_cursor += 1
-
-                elif param_dict[param] == 2:
-                    for lipid_code in ns.all_angles_types[param]:
-                        for angle_id in ns.all_angles_types[param][lipid_code]:
-                            current_cg_itps[lipid_code]['angle'][angle_id]['value'] = round(
-                                parameters_set[param_cursor], 3)
-                            current_cg_itps[lipid_code]['angle'][angle_id]['fct'] = round(
-                                parameters_set[param_cursor + 1], 2)
-                    param_cursor += 2
+        elif param.startswith('A') and param.endswith('fct'):
+            for lipid_code in ns.all_angles_types[param_short]:
+                for angle_id in ns.all_angles_types[param_short][lipid_code]:
+                    current_cg_itps[lipid_code]['angle'][angle_id]['fct'] = round(parameters_set[param_cursor], 2)
+            param_cursor += 1
 
     return current_cg_itps, param_cursor
 
@@ -302,22 +287,22 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
 ; name      mass  chrg ptype sig eps\n''')
 
         for bead_type in ns.all_beads_types:
-            fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format(bead_type, ns.beads_masses[bead_type]))
+            fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format(bead_type, ns.user_config['beads_masses'][bead_type]))
 
         # write WATER bead description if we are in WET
-        if ns.solv == 'WET' and ns.mapping_type == 'MARTINI2':
+        if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI2':
             fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('P4', 72))
 
-        elif ns.solv == 'WET' and ns.mapping_type == 'MARTINI3':
+        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'].startswith('MARTINI3'):
             fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('WN', 72))
 
         fp.write('''\n[ nonbond_params ]
 ;  part part   func sig      eps\n''')
 
         # radii come first in the vector of parameters for this iteration
-        if ns.tune_radii:
-            for radii_grp in sorted(ns.user_config.tune_radii_in_groups):
-                ns.user_config.init_beads_radii[radii_grp] = parameters_set[param_cursor]
+        if ns.user_config['tune_radii']:
+            for radii_grp in sorted(ns.user_config['tune_radii_in_groups']):
+                ns.user_config['init_beads_radii'][radii_grp] = parameters_set[param_cursor]
                 param_cursor += 1
 
         # plot a matrix of LJ EPS interactions strength
@@ -330,16 +315,16 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
             beads_pair = ns.all_beads_pairs[nb_LJ]
             bead_type_1, bead_type_2 = beads_pair
 
-            if ns.tune_radii:
+            if ns.user_config['tune_radii']:
                 sig = ns.user_config.init_beads_radii[ns.reverse_radii_mapping[bead_type_1]] + ns.user_config.init_beads_radii[ns.reverse_radii_mapping[bead_type_2]]  # here sig is the sum of radii of each bead type
             else:
-                sig = ns.user_config.init_nonbonded[' '.join(ns.all_beads_pairs[nb_LJ])]['sig']  # here the sig is predefined
+                sig = ns.user_config['init_nonbonded'][' '.join(ns.all_beads_pairs[nb_LJ])]['sig']  # here the sig is predefined
 
-            if ns.tune_eps:
+            if ns.user_config['tune_epsilons']:
                 eps = parameters_set[param_cursor]  # get the LJ from the optimizer
                 param_cursor += 1
             else:
-                eps = ns.user_config.init_nonbonded[' '.join(ns.all_beads_pairs[nb_LJ])]['eps']  # get initial LJ from existing FF data
+                eps = ns.user_config['init_nonbonded'][' '.join(ns.all_beads_pairs[nb_LJ])]['eps']  # get initial LJ from existing FF data
 
             fp.write('{0:>7} {1:<7}1    {2:1.4f}   {3:1.4f}\n'.format(bead_type_1, bead_type_2, sig, eps))
 
@@ -367,7 +352,7 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
         plt.close(fig)
 
         # write P4 bead interactions if we are in WET + the Water ITP -- From martini_v2.2_PEO_PS_CNP.itp
-        if ns.solv == 'WET' and ns.mapping_type == 'MARTINI2':
+        if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI2':
 
             fp.write('''
 
@@ -390,7 +375,7 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
 
 ''')
 
-        elif ns.solv == 'WET' and ns.mapping_type == 'MARTINI3':
+        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'].startswith('MARTINI3'):
 
             water2beads = {
                 'Q0': '     WN Q0     1    0.470   5.070\n',
@@ -429,19 +414,19 @@ def backup_swarm_iter_logs_and_checkpoint(ns):
     # so the checkpoints swarm iteration index corresponds to the END of an iteration
     # anyways if we need these files on day, we will treat checkpoints and logs manually
     # this is just for safety in case something goes seriously wrong (= code crashes and we need to recover an opti)
-    checkpoint_to_backup = f'{ns.exec_folder}/{ns.fstpso_checkpoint_out}'
+    checkpoint_to_backup = f"{ns.user_config['exec_folder']}/{ns.fstpso_checkpoint_out}"
     # remove file extension and add details
     fstpso_checkpoint_out_copy = f'{ns.fstpso_checkpoint_out[:-4]}_end_swarm_iter_{ns.n_swarm_iter - 1}.obj'
     if os.path.isfile(checkpoint_to_backup):
         # just for security when we manually change directories for continuing opti cycles
-        if not os.path.isdir(f'{ns.exec_folder}/CHECKPOINTS_BACKUP'):
-            os.mkdir(f'{ns.exec_folder}/CHECKPOINTS_BACKUP')
-        shutil.copy(checkpoint_to_backup, f'{ns.exec_folder}/CHECKPOINTS_BACKUP/{fstpso_checkpoint_out_copy}')
+        if not os.path.isdir(f"{ns.user_config['exec_folder']}/CHECKPOINTS_BACKUP"):
+            os.mkdir(f"{ns.user_config['exec_folder']}/CHECKPOINTS_BACKUP")
+        shutil.copy(checkpoint_to_backup, f"{ns.user_config['exec_folder']}/CHECKPOINTS_BACKUP/{fstpso_checkpoint_out_copy}")
 
     # also the output logs just in case
-    shutil.copy(f'{ns.exec_folder}/{ns.opti_moves_file}', f'{ns.exec_folder}/{ns.opti_moves_file[:-4]}_end_swarm_iter_{ns.n_swarm_iter - 1}.log')
-    shutil.copy(f'{ns.exec_folder}/{ns.opti_moves_details_lipid_temp_file}', f'{ns.exec_folder}/{ns.opti_moves_details_lipid_temp_file[:-4]}_end_swarm_iter_{ns.n_swarm_iter - 1}.log')
-    shutil.copy(f'{ns.exec_folder}/{ns.opti_moves_times_file}', f'{ns.exec_folder}/{ns.opti_moves_times_file[:-4]}_end_swarm_iter_{ns.n_swarm_iter - 1}.log')
+    shutil.copy(f"{ns.user_config['exec_folder']}/{ns.opti_moves_file}", f"{ns.user_config['exec_folder']}/{ns.opti_moves_file[:-4]}_end_swarm_iter_{ns.n_swarm_iter - 1}.log")
+    shutil.copy(f"{ns.user_config['exec_folder']}/{ns.opti_moves_details_lipid_temp_file}", f"{ns.user_config['exec_folder']}/{ns.opti_moves_details_lipid_temp_file[:-4]}_end_swarm_iter_{ns.n_swarm_iter - 1}.log")
+    shutil.copy(f"{ns.user_config['exec_folder']}/{ns.opti_moves_times_file}", f"{ns.user_config['exec_folder']}/{ns.opti_moves_times_file[:-4]}_end_swarm_iter_{ns.n_swarm_iter - 1}.log")
 
 def check_log_files(path_log_file, particle=True):
     if os.path.isfile(path_log_file):

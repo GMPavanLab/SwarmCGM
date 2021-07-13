@@ -250,13 +250,13 @@ class HPCJobs:
                 f'''\n    if test -f "equi.tpr"; then'''  # IF EQUI SETUP IS OK
                 f'''\n      sleep $[ ( $RANDOM % 11 )  + 5 ]s'''  # sleep a little in case all jobs would start at the same time
                 # f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN EQUI
-                f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on'''  # RUN EQUI
+                f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -bonded cpu -nb cpu'''  # RUN EQUI
                 f'''\n      if test -f "equi.gro"; then'''  # IF EQUI FINISHED CORRECTLY
                 f'''\n        gmx grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod'''  # SETUP PROD
                 f'''\n        if test -f "prod.tpr"; then'''  # IF PROD SETUP IS OK
                 f'''\n          sleep $[ ( $RANDOM % 11 )  + 5 ]s'''  # sleep a little in case all jobs would start at the same time
                 # f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN PROD
-                f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on'''  # RUN PROD
+                f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -bonded cpu -nb cpu'''  # RUN PROD
                 f'''\n        fi'''
                 f'''\n      fi'''
                 f'''\n    fi'''

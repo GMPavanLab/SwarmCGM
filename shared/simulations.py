@@ -9,32 +9,33 @@ import config
 
 
 # build gromacs command with arguments
-def gmx_args(gmx_cmd, nb_threads, gpu_id, gmx_additional_args_str):
+def gmx_args(gmx_cmd, nb_threads, gpu_id, gmx_additional_args_str, gmx_gpu_cancel_str):
     if int(nb_threads) > 0:
-        gmx_cmd += ' -nt '+str(nb_threads)
-    if gpu_id != '':
-        gmx_cmd += ' -gpu_id '+str(gpu_id)
-    gmx_cmd += gmx_additional_args_str
+        gmx_cmd += f" -nt {nb_threads}"
+    if gpu_id == 'X':
+        gmx_cmd += f" {gmx_gpu_cancel_str}"
+    else:
+        gmx_cmd += f" -gpu_id {gpu_id}"
+    gmx_cmd += f" {gmx_additional_args_str}"
     return gmx_cmd
 
 
 def run_sims(ns, slot_nt, slot_gpu_id):
 
     gmx_start = datetime.now().timestamp()
-
     # print('Starting run_sims() from dir:', os.getcwd())
 
-    # start from the mapped AA frames  ! AS IS !   -- and we will do mini/equi/prod
+    # start from the mapped AA frames -- and we will do mini/equi/prod
     starting_frame = 'start_frame.gro'
 
     # grompp -- MINI
-    gmx_cmd = ns.gmx_path + ' grompp -c ' + starting_frame + ' -p system.top -f mini.mdp -o mini -maxwarn 1'
+    gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c {starting_frame} -p system.top -f mini.mdp -o mini -maxwarn 1"
     gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     gmx_out = gmx_process.communicate()[1].decode()
 
-    if gmx_process.returncode == 0:
+    if os.path.isfile('mini.tpr'):
         # mdrun -- MINI
-        gmx_cmd = gmx_args(ns.gmx_path + ' mdrun -deffnm mini', slot_nt, slot_gpu_id, ns.user_config.gmx_additional_args_str)
+        gmx_cmd = gmx_args(f"{ns.user_config['gmx_path']} mdrun -deffnm mini", slot_nt, slot_gpu_id, ns.user_config['gmx_mini_additional_args_str'], ns.user_config['gmx_gpu_cancel_str'])
         gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        preexec_fn=os.setsid)  # create a process group for the MINI run
 
@@ -65,16 +66,14 @@ def run_sims(ns, slot_nt, slot_gpu_id):
     # if MINI finished properly, we just check for the .gro file printed in the end
     if os.path.isfile('mini.gro'):
 
-        # modify_mdp(ns, mdp_filename_in='../' + ns.cg_equi_mdp, mdp_filename_out='equi.mdp', temp=temp[:-1], sim_type='equi')
-
         # grompp -- EQUI
-        gmx_cmd = ns.gmx_path + ' grompp -c mini.gro -p system.top -f equi.mdp -n index.ndx -o equi'
+        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c mini.gro -p system.top -f equi.mdp -n index.ndx -o equi"
         gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         gmx_out = gmx_process.communicate()[1].decode()
 
-        if gmx_process.returncode == 0:
+        if os.path.isfile('equi.tpr'):
             # mdrun -- EQUI
-            gmx_cmd = gmx_args(ns.gmx_path + ' mdrun -deffnm equi', slot_nt, slot_gpu_id, ns.user_config.gmx_additional_args_str)
+            gmx_cmd = gmx_args(f"{ns.user_config['gmx_path']} mdrun -deffnm equi", slot_nt, slot_gpu_id, ns.user_config['gmx_equi_additional_args_str'], ns.user_config['gmx_gpu_cancel_str'])
             gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            preexec_fn=os.setsid)  # create a process group for the EQUI run
 
@@ -97,23 +96,21 @@ def run_sims(ns, slot_nt, slot_gpu_id):
                     else:
                         last_log_file_size = log_file_size
         else:
-            # pass
+            pass
             # sim_status = 'Equilibration run failed (simulation crashed)'
-            sys.exit('\n\n'+config.header_gmx_error+gmx_out+'\n'+config.header_error+'Gmx grompp failed at the EQUILIBRATION step, see gmx error message above\nPlease check the parameters of the provided MDP file\n')
+            # sys.exit('\n\n'+config.header_gmx_error+gmx_out+'\n'+config.header_error+'Gmx grompp failed at the EQUILIBRATION step, see gmx error message above\nPlease check the parameters of the provided MDP file\n')
 
     # if EQUI finished properly, we just check for the .gro file printed in the end
     if os.path.isfile('equi.gro'):
 
-        # modify_mdp(ns, mdp_filename_in='../' + ns.cg_prod_mdp, mdp_filename_out='prod.mdp', temp=temp[:-1], sim_type='prod')
-
         # grompp -- PROD
-        gmx_cmd = ns.gmx_path + ' grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod'
+        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod"
         gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         gmx_out = gmx_process.communicate()[1].decode()
 
-        if gmx_process.returncode == 0:
+        if os.path.isfile('prod.tpr'):
             # mdrun -- PROD
-            gmx_cmd = gmx_args(ns.gmx_path + ' mdrun -deffnm prod', slot_nt, slot_gpu_id, ns.user_config.gmx_additional_args_str)
+            gmx_cmd = gmx_args(f"{ns.user_config['gmx_path']} mdrun -deffnm prod", slot_nt, slot_gpu_id, ns.user_config['gmx_prod_additional_args_str'], ns.user_config['gmx_gpu_cancel_str'])
             gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            preexec_fn=os.setsid)  # create a process group for the MD run
 
@@ -136,9 +133,9 @@ def run_sims(ns, slot_nt, slot_gpu_id):
                     else:
                         last_log_file_size = log_file_size
         else:
-            # pass
+            pass
             # sim_status = 'MD run failed (simulation crashed)'
-            sys.exit('\n\n'+config.header_gmx_error+gmx_out+'\n'+config.header_error+'Gmx grompp failed at the PRODUCTION step, see gmx error message above\nPlease check the parameters of the provided MDP file\n')
+            # sys.exit('\n\n'+config.header_gmx_error+gmx_out+'\n'+config.header_error+'Gmx grompp failed at the PRODUCTION step, see gmx error message above\nPlease check the parameters of the provided MDP file\n')
 
     gmx_time = datetime.now().timestamp() - gmx_start
 
@@ -157,10 +154,11 @@ def run_parallel(ns, job_exec_dir, nb_eval_particle, lipid_code, temp):
         for i in range(len(g_slots_states)):
             if g_slots_states[i] == 1:  # if slot is available
 
-                # print(f'Starting simulation for particle {nb_eval_particle} with {lipid_code} {temp} on slot {i + 1}')
+                print(f'  Starting simulation for particle {nb_eval_particle} {lipid_code} {temp} on slot {i + 1}')
                 g_slots_states[i] = 0  # mark slot as busy
                 slot_nt = ns.slots_nts[i]
                 slot_gpu_id = ns.slots_gpu_ids[i]
+                # print(f'  Slot uses -nt {slot_nt} and -gpu_id {slot_gpu_id} and in directory {job_exec_dir}')
                 with working_dir(job_exec_dir):
                     gmx_time = run_sims(ns, slot_nt, slot_gpu_id)
                 g_slots_states[i] = 1  # mark slot as available

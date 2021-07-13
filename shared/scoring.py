@@ -14,8 +14,8 @@ def get_particle_score(ns, nb_eval_particle, swarm_res):
 
     # first we collect
     nb_lipids_and_temps = 0
-    for lipid_code in ns.lipids_codes:
-        for temp in ns.lipids_codes[lipid_code]:
+    for lipid_code in ns.user_config['lipids_codes']:
+        for temp in ns.user_config['lipids_codes'][lipid_code]:
 
             nb_lipids_and_temps += 1
 
@@ -31,7 +31,7 @@ def get_particle_score(ns, nb_eval_particle, swarm_res):
 
             for geom_grp in all_delta_geoms_per_grp:  # apply the error tolerance for unreliable AA trajs (down-weighting)
                 for i in range(len(all_delta_geoms_per_grp[geom_grp])):
-                    all_delta_geoms_per_grp[geom_grp][i] *= ns.opti_config.reference_AA_weight[lipid_code][temp]
+                    all_delta_geoms_per_grp[geom_grp][i] *= ns.user_config['reference_AA_weight'][lipid_code][temp]
 
             for pair_type in delta_rdfs_per_grp:
                 if pair_type not in all_delta_rdfs_per_grp:
@@ -41,12 +41,12 @@ def get_particle_score(ns, nb_eval_particle, swarm_res):
 
             for pair_type in all_delta_rdfs_per_grp:
                 for i in range(len(all_delta_rdfs_per_grp[pair_type])):
-                    all_delta_rdfs_per_grp[pair_type][i] *= ns.opti_config.reference_AA_weight[lipid_code][temp]
+                    all_delta_rdfs_per_grp[pair_type][i] *= ns.user_config['reference_AA_weight'][lipid_code][temp]
 
-            # if config.exp_data[lipid_code][temp]['apl'] is not None:
+            # if ns.user_config['exp_data'][lipid_code][temp]['apl'] is not None:
             part_apls += score_parts['perc_delta_apl_adapt'] ** 2
 
-            # if config.exp_data[lipid_code][temp]['Dhh'] is not None:
+            # if ns.user_config['exp_data'][lipid_code][temp]['Dhh'] is not None:
             part_dhhs += score_parts['perc_delta_thick_adapt'] ** 2
 
     # then we aggregate

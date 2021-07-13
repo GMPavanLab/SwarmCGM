@@ -3,12 +3,8 @@ data_aa_storage_dir = 'STORAGE_READ_DATA_AA_TRAJ'
 cg_models_data_dir = 'REF_MAPPINGS_LIPIDS'
 cg_setups_data_dir = 'START_CG_SETUPS'
 aa_data_dir = 'REF_AA_TRAJS_LIPIDS'
-storage_opti_res_dir = 'STORAGE_OPTI_RES'
-aa_tpr_filename = 'only_lipids.tpr'
-aa_traj_filename = 'run_200ns_2k_frames_pbc.xtc'
 
 # parameters rounding
-# NOTE: up to 2 digits can be used but no more WHEN USING STORAGE, because after rounding these floats will be string formatted and printed using 2 digits to generate the hash key of parameters used in the pickles
 round_bases = {'bond_val': 0.001, 'bond_fct': 0.1, 'angle_val': 0.1, 'angle_fct': 0.1, 'LJ_sig': 0.001, 'LJ_eps': 0.01}
 
 # plots display parameters
@@ -32,8 +28,6 @@ best_distrib_plots = 'Best_fitted_model_AA-mapped_vs_CG_groups_distributions.png
 # stdout display formatting
 sep = ' --------------------------------------------------------------------------------------------- '
 sep_close = '+---------------------------------------------------------------------------------------------+'
-# header_warning = '\n========================= /!\\  WARNING  /!\\ ==========================\n'
 header_warning = '\n-- ! WARNING ! --\n'
-# header_error = '\n========================== /!\\  ERROR  /!\\ ===========================\n'
 header_error = '\n-- ! ERROR ! --\n'
-header_gmx_error = sep + '\n  GMX ERROR MSG\n' + sep + '\n\n'
+header_gmx_error = f'{sep}\n  GMX ERROR MSG\n{sep}\n\n'

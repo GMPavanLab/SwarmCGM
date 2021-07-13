@@ -27,7 +27,7 @@ def create_files_and_dirs_for_swarm_iter(ns, parameters_sets, nb_eval_particles_
     parameters_sets_rounded, updated_cg_itps = [], []
 
     for ii, nb_eval_particle in enumerate(nb_eval_particles_range_over_complete_opti):
-        current_eval_dir = f'{ns.exec_folder}/{config.iteration_sim_files_dirname}{nb_eval_particle}'
+        current_eval_dir = f"{ns.user_config['exec_folder']}/{config.iteration_sim_files_dirname}{nb_eval_particle}"
 
         # 0. round the parameters given by FST-PSO to the required precision, given in config file
         parameters_set = parameters_sets[ii]
@@ -39,18 +39,18 @@ def create_files_and_dirs_for_swarm_iter(ns, parameters_sets, nb_eval_particles_
         current_cg_itps, param_cursor = update_cg_itp_obj(ns, parameters_set=parameters_set_rounded)
         updated_cg_itps.append(current_cg_itps)
 
-        for lipid_code in ns.lipids_codes:
-            for temp in ns.lipids_codes[lipid_code]:
+        for lipid_code in ns.user_config['lipids_codes']:
+            for temp in ns.user_config['lipids_codes'][lipid_code]:
 
                 # 1. create all subdirs for each lipid and temperature
                 os.makedirs(f'{current_eval_dir}/{lipid_code}_{temp}', exist_ok=True)
 
                 # 2. copy starting frames (different for each lipid/temperature) + TOP file (the same for each temperature) + NDX
-                shutil.copy(f'{config.cg_setups_data_dir}/{lipid_code}_{ns.mapping_type}_{ns.solv}/start_frame_{temp}.gro',
+                shutil.copy(f"{config.cg_setups_data_dir}/{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}/start_frame_{temp}.gro",
                             f'{current_eval_dir}/{lipid_code}_{temp}/start_frame.gro')
-                shutil.copy(f'{config.cg_setups_data_dir}/{lipid_code}_{ns.mapping_type}_{ns.solv}/system_{temp}.top',
+                shutil.copy(f"{config.cg_setups_data_dir}/{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}/system_{temp}.top",
                             f'{current_eval_dir}/{lipid_code}_{temp}/system.top')
-                shutil.copy(f'{config.cg_setups_data_dir}/{lipid_code}_{ns.mapping_type}_{ns.solv}/index_{temp}.ndx',
+                shutil.copy(f"{config.cg_setups_data_dir}/{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}/index_{temp}.ndx",
                             f'{current_eval_dir}/{lipid_code}_{temp}/index.ndx')
 
                 # 3. copy MDP files + adapt temperature etc on the fly
@@ -165,16 +165,16 @@ def eval_function_parallel_swarm(parameters_sets, args):
                                                        ns.n_swarm_iter * ns.nb_particles + 1)
     for nb_eval_particle in nb_eval_particles_range_over_complete_opti:
         swarm_res[nb_eval_particle] = {}
-        for lipid_code in ns.lipids_codes:
+        for lipid_code in ns.user_config['lipids_codes']:
             swarm_res[nb_eval_particle][lipid_code] = {}
-            for temp in ns.lipids_codes[lipid_code]:
+            for temp in ns.user_config['lipids_codes'][lipid_code]:
                 swarm_res[nb_eval_particle][lipid_code][temp] = {}
 
                 # TODO: when doing something else than lipids+temp we need to adapt these jobs names
                 # NOTE: the master job name must stay included in variable 'job_name' below, so there is not mix-up
                 #       if 2 masters are running on the same HPC or SUPSI machine
-                job_name = f'{ns.master_job_name}_{nb_eval_particle}_{lipid_code}_{temp}'
-                job_exec_dir = f'{ns.exec_folder}/{config.iteration_sim_files_dirname}{nb_eval_particle}/{lipid_code}_{temp}'
+                job_name = f"{ns.user_config['master_job_name']}_{nb_eval_particle}_{lipid_code}_{temp}"
+                job_exec_dir = f"{ns.user_config['exec_folder']}/{config.iteration_sim_files_dirname}{nb_eval_particle}/{lipid_code}_{temp}"
 
                 jobs[job_name] = {'job_exec_dir': job_exec_dir}
 
@@ -191,14 +191,14 @@ def eval_function_parallel_swarm(parameters_sets, args):
 
     p_updated_cg_itps = []
     for i in range(len(nb_eval_particles_range_over_complete_opti)):
-        for lipid_code in ns.lipids_codes:
-            for _ in ns.lipids_codes[lipid_code]:
+        for lipid_code in ns.user_config['lipids_codes']:
+            for _ in ns.user_config['lipids_codes'][lipid_code]:
                 p_updated_cg_itps.append(updated_cg_itps[i])
 
     # 3. run the simulations in queue for HPC or LOCAL (SUPSI machines)
     ts_start_jobs_execution = datetime.now().timestamp()
 
-    if ns.nb_hpc_slots != 0:  # CASE: running on HPC with SLURM
+    if ns.user_config['nb_hpc_slots'] != 0:  # CASE: running on HPC with SLURM
 
         # NOTE: all of this is good only for SLURM -- for HPC that do NOT use SLURM we will need to make another job runner
         # NOTE: JOB TIME -- For lipids I tested DLPC and DOPC (having the min/max of particles among all lipids simulations)
@@ -209,7 +209,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
                 'account': 's1027',  # this HAS to be provided (CSCS account for billing the node hours)
                 'time': '01:15:00',  # this HAS to be format: '00:30:00' for a 30 min job
                 'nodes': 1,  # number of nodes requested for a given job
-                'ntasks-per-node': 4,  # number of MPI ranks
+                'ntasks-per-node': 12,  # number of MPI ranks
                 'cpus-per-task': 1,
                 'partition': 'normal',  # normal / low / debug (debug still bills the account, it just has a higher priority)
                 'constraint': 'gpu',  # potential specific request about architecture
@@ -219,7 +219,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
             'bash_exports': ['OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK', 'CRAY_CUDA_MPS=1']  # bash exports will be made in the order they are provided here
         }
 
-        hpc_jobs = HPCJobs(hpc_username, jobs, ns.nb_hpc_slots, slurm_single_job_args, gmx_path=ns.gmx_path)
+        hpc_jobs = HPCJobs(hpc_username, jobs, ns.user_config['nb_hpc_slots'], slurm_single_job_args, gmx_path=ns.user_config['gmx_path'])
 
         # check how much exec time is remaining on the Master execution and verify we can run a full SWARM iteration
         ns.master_job_id, ts_master_elapsed, ts_master_total = hpc_jobs.get_master_time(master_job_name=ns.master_job_name)
@@ -272,7 +272,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
     #    also check that simulations finished correctly, by verifying that the final .gro file exists
     ts_start_jobs_statuses = datetime.now().timestamp()
 
-    if ns.nb_hpc_slots != 0:  # CASE: running on HPC with SLURM
+    if ns.user_config['nb_hpc_slots'] != 0:  # CASE: running on HPC with SLURM
         jobs_stats = hpc_jobs.get_stats()
     else:  # CASE: running on LOCAL (SUPSI machines)
         jobs_stats = {}
@@ -292,7 +292,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
         swarm_res[nb_eval_particle][lipid_code][temp]['time_end_str'] = jobs_stats[job_name]['time_end_str']
         swarm_res[nb_eval_particle][lipid_code][temp]['time_elapsed_str'] = jobs_stats[job_name]['time_elapsed_str']
 
-        checked_file_path = f'{ns.exec_folder}/{config.iteration_sim_files_dirname}{nb_eval_particle}/{lipid_code}_{temp}/prod.gro'
+        checked_file_path = f"{ns.user_config['exec_folder']}/{config.iteration_sim_files_dirname}{nb_eval_particle}/{lipid_code}_{temp}/prod.gro"
         swarm_res[nb_eval_particle][lipid_code][temp]['status'] = 'failure'
         if os.path.isfile(checked_file_path):
             swarm_res[nb_eval_particle][lipid_code][temp]['status'] = 'success'
@@ -315,7 +315,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
     # account, if enabled), and if using a SUPSI machine, the number of processes should amount to the sum of all cores
     # available in all the 'GPU slots' (as we call them) that have been selected for this optimization run (i.e. if you book
     # 3 GPU slots with each -nt 9 and each a different GPU unit, then here you can select number of processes = 3*9 = 27)
-    with multiprocessing.Pool(processes=ns.nb_cores_analysis) as pool:
+    with multiprocessing.Pool(processes=ns.user_config['nb_cores_analysis']) as pool:
 
         p_args = zip(repeat(ns), p_nb_eval_particle, p_lipid_code, p_temp, p_sim_status, p_updated_cg_itps)
         p_res = pool.starmap(get_score_and_plot_graphs_for_single_job, p_args)
@@ -356,12 +356,12 @@ def eval_function_parallel_swarm(parameters_sets, args):
 
         print('*******************************************************************')
         print_stdout_forced()
-        print_stdout_forced(f'SWARM ITER {ns.n_swarm_iter} -- PARTICLE {nb_eval_particle}     (equi runs: {ns.user_config.cg_time_equi} ns / prod runs: {ns.prod_sim_time} ns)')
+        print_stdout_forced(f"SWARM ITER {ns.n_swarm_iter} -- PARTICLE {nb_eval_particle}     (equi runs: {ns.user_config['cg_time_equi']} ns / prod runs: {ns.prod_sim_time} ns)")
         print_stdout_forced('\nRounded parameters:', ['{:.3f}'.format(param) for param in eval_scores_details[nb_eval_particle]['parameters_set_rounded']])
         print()
 
-        for lipid_code in sorted(ns.lipids_codes):
-            for temp in ns.lipids_codes[lipid_code]:
+        for lipid_code in sorted(ns.user_config['lipids_codes']):
+            for temp in ns.user_config['lipids_codes'][lipid_code]:
 
                 # write stdout + logs for each job (job = a simulation that has been performed as part of a particle)
                 print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp)
@@ -376,7 +376,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
         # results log -- particle score + parameters
         eval_score = eval_scores_details[nb_eval_particle]['eval_score']
         parameters_set_rounded = ['{:.3f}'.format(param) for param in eval_scores_details[nb_eval_particle]['parameters_set_rounded']]
-        with open(ns.exec_folder + '/' + ns.opti_moves_file, 'a') as fp:
+        with open(f"{ns.user_config['exec_folder']}/{ns.opti_moves_file}", 'a') as fp:
             fp.write(f'{ns.n_cycle} {ns.n_swarm_iter} {nb_eval_particle} {round(eval_score, 4)} ' + ' '.join(parameters_set_rounded) + '\n')
 
     delta_ts_swarm_iter = datetime.now().timestamp() - ts_start_swarm_iter
@@ -391,7 +391,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
     print(f'Average (updated) swarm iteration wall clock time: {avg_delta_ts_swarm_iter_h} h (range: {min_delta_ts_swarm_iter_h} h to {max_delta_ts_swarm_iter_h} h)\n')
 
     # write timings in log
-    with open(f'{ns.exec_folder}/{ns.opti_moves_times_file}', 'a') as fp:
+    with open(f"{ns.user_config['exec_folder']}/{ns.opti_moves_times_file}", 'a') as fp:
         # master elapsed and remaining time are calculated at the very beginning of the swarm iteration, NOT at the end
         fp.write(f'{ns.n_cycle} {ns.n_swarm_iter} {round(delta_ts_swarm_iter)} {delta_ts_swarm_iter_h} {delta_ts_start_jobs_execution_h} {delta_ts_start_jobs_analysis_h} {ts_master_elapsed_h} {delta_ts_master_remaining_h}\n')
 
