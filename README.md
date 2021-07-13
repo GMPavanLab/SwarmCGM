@@ -63,7 +63,7 @@ Standalone files can be directly copied as [provided here](https://github.com/GM
 Users must install the following python packages prior to executing the code:
 
 ```
-pip/pip3 install numpy scipy matplotlib MDAnalysis pyemd fst-pso
+pip/pip3 install numpy scipy matplotlib MDAnalysis pyemd fst-pso pyyaml
 ```
 
 which will install in about 2-5 minutes on a machine with the "testing purposes" hardware described.
@@ -78,6 +78,7 @@ Tested python & package versions:
 - MDAnalysis: 1.0.0, 1.0.1
 - pyemd: 0.5.1
 - fst-pso: 1.7.15
+- pyyaml: 5.4.1
 
 # Demo
 

@@ -222,7 +222,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
         hpc_jobs = HPCJobs(hpc_username, jobs, ns.user_config['nb_hpc_slots'], slurm_single_job_args, gmx_path=ns.user_config['gmx_path'])
 
         # check how much exec time is remaining on the Master execution and verify we can run a full SWARM iteration
-        ns.master_job_id, ts_master_elapsed, ts_master_total = hpc_jobs.get_master_time(master_job_name=ns.master_job_name)
+        ns.master_job_id, ts_master_elapsed, ts_master_total = hpc_jobs.get_master_time(master_job_name=ns.user_config['master_job_name'])
         delta_ts_master_remaining = ts_master_total - ts_master_elapsed
         # 30% margin because we do NOT know at which speed future jobs will enter the SLURM queue
         # 0% margin if we run on the long queue because we hardly will have the last iter being worst than the worst of 7 days

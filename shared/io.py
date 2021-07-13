@@ -359,6 +359,7 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
      P4 P4     1    0.470   5.000
      P4 Na     1    0.470   4.000
      P4 C3     1    0.470   2.700
+     P4 C4     1    0.470   2.700
      P4 C1     1    0.470   2.000
      P4 Qa     1    0.470   5.600
      P4 Q0     1    0.470   5.600
