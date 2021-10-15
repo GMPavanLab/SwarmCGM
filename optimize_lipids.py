@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import os, sys, re, shutil, subprocess, time, copy, contextlib, pickle, itertools, warnings
+import os, sys, shutil, subprocess, time, copy, pickle, itertools, warnings
 
 warnings.filterwarnings("ignore")
 from argparse import ArgumentParser, RawTextHelpFormatter, SUPPRESS
@@ -15,13 +15,12 @@ import yaml
 
 
 import config
-from opti_CG import par_wrap, load_aa_data, read_cg_itp_file_grp_comments, \
+from shared.opti_CG import read_cg_itp_file_grp_comments, \
     get_search_space_boundaries, get_initial_guess_list, create_bins_and_dist_matrices, read_ndx_atoms2beads, \
-    make_aa_traj_whole_for_selected_mols, get_AA_bonds_distrib, get_AA_angles_distrib, \
-    get_atoms_weights_in_beads, get_beads_MDA_atomgroups, set_MDA_backend, initialize_cg_traj, \
+    get_AA_bonds_distrib, get_AA_angles_distrib, \
+    get_atoms_weights_in_beads, get_beads_MDA_atomgroups, initialize_cg_traj, \
     map_aa2cg_traj, get_cycle_restart_guess_list
 from shared.eval_func_parallel import eval_function_parallel_swarm  # new implementation of parallelization
-from shared.io import update_cg_itp_obj
 
 # import matplotlib
 # matplotlib.use('TkAgg') # for interactive plotting (not to file)
@@ -46,89 +45,16 @@ Script used for the optimization of lipids according to AA reference membranes s
 
 req_args_header = config.sep_close + '\n|                                     REQUIRED ARGUMENTS                                      |\n' + config.sep_close
 opt_args_header = config.sep_close + '\n|                                     OPTIONAL ARGUMENTS                                      |\n' + config.sep_close
-
-# bullet = '❭'
-# bullet = '★'
-# bullet = '|'
 bullet = ' '
 
 required_args = args_parser.add_argument_group(bullet + 'OPTI CONFIGURATION')
 required_args.add_argument('-cfg', dest='cfg', help='YAML configuration file', type=str, metavar='')
 
-# required_args = args_parser.add_argument_group(bullet + 'REFERENCE DATA')
-# # required_args.add_argument('-lipids', dest='str_lipids', help='String of codes of lipids to use, for example: \'POPC DOPC\'', type=str, required=True, metavar='')
-# required_args.add_argument('-mapping', dest='mapping_type',
-#                            help='Mapping type, either: MARTINI2, MARTINI3, SIRAH, OPTION5, SUPERCG, etc.', type=str,
-#                            required=True, metavar='')
-# required_args.add_argument('-pos', dest='map_center', help='Mapped CG particles positioning, either: COM or COG',
-#                            type=str, required=True, metavar='')
-# required_args.add_argument('-solv', dest='solv', help='Presence of explicit solvent, either: WET or DRY', type=str,
-#                            required=True, metavar='')
-# required_args.add_argument('-reset', dest='reset',
-#                            help='Do NOT use stored ref. AA data and re-generate them from the AA trajs (takes no argument)',
-#                            action='store_true', default=False)
-# required_args.add_argument('-next_cycle', dest='next_cycle',
-#                            help='If checkpoints are present, restart from checkpoint in the next planned optimization cycle (takes no argument)',
-#                            action='store_true', default=False)
-# required_args.add_argument('-aa_ff', dest='aa_ff', help='Reference AA force field: slipids, charmm36u, etc.',
-#                            type=str, default='slipids', metavar='   (slipids)')
-
-# optional_args1 = args_parser.add_argument_group(bullet + 'GROMACS SETTINGS')
-# optional_args1.add_argument('-gmx', dest='gmx_path', help=config.help_gmx_path, type=str, default=config.gmx_path,
-#                             metavar='                  ' + par_wrap(config.gmx_path))
-# optional_args1.add_argument('-nb_cores_analysis', dest='nb_cores_analysis', help='Number of cores to use on the Master node for analysis of the simulations\nRequired for either HPC or SUPSI machines', type=int,
-#                             metavar='', required=True)
-# optional_args1.add_argument('-master_job_name', dest='master_job_name',
-#                             help='Job name of the Master process in the HPC SLURM queue', type=str, default='MASTER', metavar='MASTER')
-# optional_args1.add_argument('-nb_hpc_slots', dest='nb_hpc_slots',
-#                             help='Max nb of slots in the SLURM HPC queue, used for full swarm parallelization (triggers IGNORING -nt and -gpu_id)\nThis can be equal to the number of nodes to use, or not.\nse the SLURM config accordingly.',
-#                             type=int, default='0', metavar="                     '0'")
-# optional_args1.add_argument('-nt', dest='nb_threads',
-#                             help='String (use quotes) space-separated list of number of threads to use for each slot (forwarded to gmx mdrun -nt)',
-#                             type=str, default='0', metavar="                     '0'")
-# optional_args1.add_argument('-gpu_id', dest='gpu_id',
-#                             help='String (use quotes) space-separated list of GPU device IDs for each slot',
-#                             type=str, default='', metavar='')
-# optional_args1.add_argument('-sim_kill_delay', dest='sim_kill_delay',
-#                             help='Time (s) after which to kill a simulation that has not been\nwriting into its log file, in case a simulation gets stuck',
-#                             type=int, default=30, metavar='        (30)')
-
-# optional_args5 = args_parser.add_argument_group(bullet + 'CG MODEL SCORING')
-# optional_args5.add_argument('-b2a_score_fact', dest='bonds2angles_scoring_factor',
-#                             help='C constant of the eval score', type=float,
-#                             default=config.bonds2angles_scoring_factor,
-#                             metavar='       ' + par_wrap(config.bonds2angles_scoring_factor))
-# optional_args5.add_argument('-g2a_score_fact', dest='geoms2apl_scoring_factor', help='G constant of the eval score', type=float, default=config.geoms2apl_scoring_factor, metavar='     '+par_wrap(config.geoms2apl_scoring_factor))
-# optional_args5.add_argument('-t2a_score_fact', dest='thickness2apl_scoring_factor', help='K constant of the eval score', type=float, default=config.thickness2apl_scoring_factor, metavar='       '+par_wrap(config.thickness2apl_scoring_factor))
-
-# optional_args5.add_argument('-r2a_score_fact', dest='rdfs2apl_scoring_factor', help='RDFs constant of the eval score', type=float, default=config.rdfs2apl_scoring_factor, metavar='       '+par_wrap(config.rdfs2apl_scoring_factor))
-# optional_args5.add_argument('-bw_constraints', dest='bw_constraints', help=config.help_bw_constraints, type=float,
-#                             default=config.bw_constraints, metavar='    ' + par_wrap(config.bw_constraints))
-# optional_args5.add_argument('-bw_bonds', dest='bw_bonds', help=config.help_bw_bonds, type=float,
-#                             default=config.bw_bonds, metavar='           ' + par_wrap(config.bw_bonds))
-# optional_args5.add_argument('-bw_angles', dest='bw_angles', help=config.help_bw_angles, type=float,
-#                             default=config.bw_angles, metavar='              ' + par_wrap(config.bw_angles))
-# optional_args5.add_argument('-bw_dihedrals', dest='bw_dihedrals', help=config.help_bw_dihedrals, type=float,
-#                             default=config.bw_dihedrals, metavar='           ' + par_wrap(config.bw_dihedrals))
-# optional_args5.add_argument('-bonds_max_range', dest='bonded_max_range', help=config.help_bonds_max_range,
-#                             type=float, default=config.bonds_max_range,
-#                             metavar='        ' + par_wrap(config.bonds_max_range))
-# optional_args5.add_argument('-bw_rdfs', dest='bw_rdfs', help='Bandwidth for radial distribution functions (nm)',
-#                             type=float, default=config.bw_rdfs, metavar='         ' + par_wrap(config.bw_rdfs))
-# optional_args5.add_argument('-cut_rdfs', dest='cut_rdfs_short',
-#                             help='Cutoff for radial distribution functions (nm)', type=float, default='2.5',
-#                             metavar='           (2.5)')  # WARNING: LET THIS AT 2.5 nm or more, OTHERWISE THE RDF COUNT NORM WILL BE SCREWED UP FOR COUNT NORMALIZATION !!!
+optional_args1 = args_parser.add_argument_group(bullet + 'HPC SETTINGS')
+optional_args1.add_argument('-master_job_name', dest='master_job_name',
+                            help='Job name of the Master process in the HPC SLURM queue', type=str, default='MASTER', metavar='MASTER')
 
 optional_args3 = args_parser.add_argument_group(bullet + 'OTHERS')
-# optional_args3.add_argument('-o', dest='output_folder', help='Directory to create for storing all outputs of Swarm-CG',
-#                             type=str, default='', metavar='')
-# optional_args3.add_argument('-disable_x_scaling', dest='row_x_scaling',
-#                             help='Disable auto-scaling of X axis across each row on geoms distribs plots',
-#                             default=True, action='store_false')
-# optional_args3.add_argument('-disable_y_scaling', dest='row_y_scaling',
-#                             help='Disable auto-scaling of Y axis across each row on geoms distribs plots',
-#                             default=True, action='store_false')
-# optional_args3.add_argument('-keep_all_sims', dest='keep_all_sims', help='Store all gmx files for all simulations, may use disk space', action='store_true', default=False)
 optional_args3.add_argument('-h', '--help', help='Show this help message and exit', action='help')
 optional_args3.add_argument('-v', '--verbose', dest='verbose', help='Verbose mode', action='store_true',
                             default=False)
@@ -157,9 +83,14 @@ ns.apl_exp_error = 0.008  # nm^2
 ns.dhh_exp_error = 0.065  # nm
 
 # MDP files, will be searched for in directory: config.cg_setups_data_dir
-ns.cg_mini_mdp = 'mini.mdp'
-ns.cg_equi_mdp = 'equi.mdp'
-ns.cg_prod_mdp = 'prod.mdp'
+if ns.user_config['solv'] == 'WET':
+    ns.cg_mini_mdp = 'wet_mini.mdp'
+    ns.cg_equi_mdp = 'wet_equi.mdp'
+    ns.cg_prod_mdp = 'wet_prod.mdp'
+elif ns.user_config['solv'] == 'DRY':
+    ns.cg_mini_mdp = 'dry_mini.mdp'
+    ns.cg_equi_mdp = 'dry_equi.mdp'
+    ns.cg_prod_mdp = 'dry_prod.mdp'
 
 # namespace variables not directly linked to arguments for plotting or for global package interpretation
 ns.mismatch_order = False
@@ -270,6 +201,7 @@ if os.path.isdir(ns.user_config['exec_folder']):
             irrelevant_sim_dir = f"{ns.user_config['exec_folder']}/{config.iteration_sim_files_dirname}{n_part}"
             if os.path.isdir(irrelevant_sim_dir):
                 shutil.rmtree(irrelevant_sim_dir)
+
                 removed_dirs = True
                 print(f'Removed irrelevant dir: {irrelevant_sim_dir}')
         if removed_dirs:
@@ -310,7 +242,7 @@ if ns.user_config['solv'] != 'WET' and ns.user_config['solv'] != 'DRY':
     sys.exit('Please provide as argument either WET or DRY to indicate if solvent should be explicit or not')
 
 # check parallelization arguments
-if ns.user_config['nb_hpc_slots'] != 0 and (ns.user_config['nb_threads'] != '0' or ns.user_config['gpu_ids'] != ''):
+if ns.user_config['nb_hpc_slots'] != 0 and (ns.user_config['nb_threads'] != '' or ns.user_config['gpu_ids'] != ''):
     sys.exit(
         'You have to choose between specifying -nb_hpc_slots OR (-nt AND -gpu_id).\n'
         'The former allows to run on a HPC, while the latter is for using LOCAL machines.\n'
@@ -376,16 +308,15 @@ for lipid_code in ns.user_config['lipids_codes']:
         else:
             str_exp_dhh = str(exp_dhh) + ' nm²'
 
-        print(' ', lipid_code, '--', temp, '-- APL:', str_exp_apl, '-- Dhh:', exp_dhh, 'nm -- Weight of the AA ref data:', ns.user_config['reference_AA_weight'][lipid_code][temp] * 100, '%')
+        print(' ', lipid_code, '--', temp, '-- APL:', str_exp_apl, '-- Dhh:', exp_dhh, 'nm -- Weight of the AA ref data:', ns.user_config['reference_AA_weight'][lipid_code] * 100, '%')
 
-# check AA files for given lipids -- THIS IS IF WE LIST THE TEMPERATURES BASED ON THE ARGUMENTS STRING
+# check AA files for given lipids
 for lipid_code in ns.user_config['lipids_codes']:
     for temp in ns.user_config['lipids_codes'][lipid_code]:
-        if not (os.path.isfile(
-                f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.tpr") and os.path.isfile(
-                f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.xtc")):
-            sys.exit(
-                f"{config.header_error}Cannot find TPR & XTC for {lipid_code} at temperature {temp}")
+        if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+            if not (os.path.isfile(f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.tpr")
+               and os.path.isfile(f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.xtc")):
+                sys.exit(f"{config.header_error}Cannot find TPR & XTC for {lipid_code} at temperature {temp}")
 
 # check mapping files for given lipids
 for lipid_code in ns.user_config['lipids_codes']:
@@ -395,7 +326,10 @@ for lipid_code in ns.user_config['lipids_codes']:
                 f"{config.cg_models_data_dir}/MAP_{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}.ndx"):
             pass
         else:
-            sys.exit(f"{config.header_error}Cannot find file of mapping {ns.user_config['mapping_type']} for {lipid_code}")
+            if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+                sys.exit(f"{config.header_error}Cannot find file of mapping {ns.user_config['mapping_type']} for {lipid_code}")
+            else:
+                pass
     else:
         sys.exit(
             f"{config.header_error}Cannot find CG model ITP file for {lipid_code} for mapping {ns.user_config['mapping_type']} with solvent {ns.user_config['solv']}")
@@ -916,21 +850,18 @@ if ns.user_config['tune_radii']:
                     ns.lipid_params_opti[lipid_code].append(f'r_{ns.reverse_radii_mapping[bead_type]}')
 
 # add LJ used per lipid
-if ns.user_config['tune_epsilons']:
-    for i in range(len(ns.all_beads_pairs)):
-        LJ_curr = '_'.join(ns.all_beads_pairs[i])
-        for lipid_code in ns.lipid_beads_pairs:
-            if ns.all_beads_pairs[i] in ns.lipid_beads_pairs[lipid_code] and LJ_curr not in ns.lipid_params_opti[lipid_code]:
-                # ns.lipid_params_opti[lipid_code].append('LJ'+str(i+1))
-                ns.lipid_params_opti[lipid_code].append('LJ_' + LJ_curr)
+for i in range(len(ns.all_beads_pairs)):
+    LJ_curr = '_'.join(ns.all_beads_pairs[i])
+    bead_pair = ' '.join(ns.all_beads_pairs[i])
+    for lipid_code in ns.lipid_beads_pairs:
+        if ns.all_beads_pairs[i] in ns.lipid_beads_pairs[lipid_code] and LJ_curr not in ns.lipid_params_opti[lipid_code] and (ns.user_config['tune_epsilons'] == 'all' or bead_pair in ns.user_config['tune_epsilons']):
+            ns.lipid_params_opti[lipid_code].append('LJ_' + LJ_curr)
 
 # gather values and force constants from config file, used to fill the input ITPs and for initialization of the swarm
 for lipid_code in ns.user_config['lipids_codes']:
     try:
         for bond_id in range(len(ns.cg_itps[lipid_code]['bond'])):
             geom_grp = ns.cg_itps[lipid_code]['bond'][bond_id]['geom_grp']
-            # if ns.geoms_val_from_cfg:
-            # 	ns.cg_itps[lipid_code]['bond'][bond_id]['value'] = ns.user_config['init_bonded'][ns.mapping_type][ns.user_config['solv']][geom_grp]['val']
             ns.cg_itps[lipid_code]['bond'][bond_id]['fct'] = ns.user_config['init_bonded'][geom_grp]['fct']
         # print('GEOM GRP:', geom_grp, '-- BOND ID:', bond_id, '-- FCT:', ns.user_config['init_bonded'][ns.mapping_type][ns.user_config['solv']][geom_grp]['fct'])
         for angle_id in range(len(ns.cg_itps[lipid_code]['angle'])):
@@ -1078,15 +1009,15 @@ if ns.user_config['tune_radii']:
         # the radius of each bead type, that will be summed between pairs of beads to get the LJ sigmas
         ns.all_params_opti.append(f'r_{radii_grp}')
 
-if ns.user_config['tune_epsilons']:
-    # get the ranges within given percentage of variation allowed for EPS, when tuning within constrained range
-    ns.eps_relative_ranges = []  # will be an array (LJ nb) of arrays (min/max EPS), used only if min_max_epsilon_relative_range != None
+# get the ranges within given percentage of variation allowed for EPS, when tuning within constrained range
+ns.eps_relative_ranges = []  # will be an array (LJ nb) of arrays (min/max EPS), used only if min_max_epsilon_relative_range != None
 
-    for i in range(len(ns.all_beads_pairs)):
-        LJ_curr = '_'.join(ns.all_beads_pairs[i])
+for i in range(len(ns.all_beads_pairs)):
+    LJ_curr = '_'.join(ns.all_beads_pairs[i])
+    bead_pair = ' '.join(ns.all_beads_pairs[i])
+
+    if ns.user_config['tune_epsilons'] == 'all' or bead_pair in ns.user_config['tune_epsilons']:
         ns.all_params_opti.append(f'LJ_{LJ_curr}')
-        bead_pair = ' '.join(ns.all_beads_pairs[i])
-
         if ns.user_config['min_max_epsilon_relative_range'] != 'None':
             min_eps = max(ns.user_config['init_nonbonded'][bead_pair]['eps'] - ns.user_config['min_max_epsilon_relative_range'], ns.user_config['min_epsilon'])
             max_eps = min(ns.user_config['init_nonbonded'][bead_pair]['eps'] + ns.user_config['min_max_epsilon_relative_range'], ns.user_config['max_epsilon'])
@@ -1277,6 +1208,7 @@ for i in range(n_cycle, len(opti_cycles) + 1):
     opti_cycle_best_params = result[0].X
     param_id, nb_LJ = 0, 0
 
+    # TODO: this is for -next_cycle and does NOT work anymore
     for param_dict in ns.all_params_opti:  # list of dict having unique keys
         for param in param_dict:  # accessing each single key of each dict
 

@@ -88,6 +88,6 @@ def get_score_and_plot_graphs_for_single_job(ns, nb_eval_particle, lipid_code, t
                       'perc_delta_rdfs': ns.worst_fit_score, 'area_compress': None, 'delta_geoms_per_grp': {},
                       'delta_rdfs_per_grp': {}}
 
-    os.chdir('../..')  # exit lipid + temp simulation directory
+    os.chdir('../../..')  # exit lipid + temp simulation directory
 
     return score_part, geoms_time, rdfs_time, error_data

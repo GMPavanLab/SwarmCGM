@@ -149,8 +149,6 @@ def eval_function_parallel_swarm(parameters_sets, args):
 
     # NOTE: if using ns.variables within the parallelized functions (i.e. anything starting HERE)
     #       they SHALL only read from the namespace, BUT NEVER WRITE !!
-    # NOTE: in function print_ff_file() there is ns.user_config.init_beads_radii that is actualized in the namespace
-    #       currently we are not using it, but if using this again it WILL CAUSE PROBLEMS
     # NOTE: variable prefix 'p_' means 'pool parallel', NOT particle
 
     # 1. data structure for storing results from THE WHOLE SWARM ITERATION
@@ -173,7 +171,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
                 # TODO: when doing something else than lipids+temp we need to adapt these jobs names
                 # NOTE: the master job name must stay included in variable 'job_name' below, so there is not mix-up
                 #       if 2 masters are running on the same HPC or SUPSI machine
-                job_name = f"{ns.user_config['master_job_name']}_{nb_eval_particle}_{lipid_code}_{temp}"
+                job_name = f"{ns.master_job_name}_{nb_eval_particle}_{lipid_code}_{temp}"
                 job_exec_dir = f"{ns.user_config['exec_folder']}/{config.iteration_sim_files_dirname}{nb_eval_particle}/{lipid_code}_{temp}"
 
                 jobs[job_name] = {'job_exec_dir': job_exec_dir}
@@ -207,9 +205,9 @@ def eval_function_parallel_swarm(parameters_sets, args):
         slurm_single_job_args = {
             'sbatch': {
                 'account': 's1027',  # this HAS to be provided (CSCS account for billing the node hours)
-                'time': '01:15:00',  # this HAS to be format: '00:30:00' for a 30 min job
+                'time': '00:55:00',  # this HAS to be format: '00:30:00' for a 30 min job
                 'nodes': 1,  # number of nodes requested for a given job
-                'ntasks-per-node': 12,  # number of MPI ranks
+                'ntasks-per-node': 4,  # number of MPI ranks
                 'cpus-per-task': 1,
                 'partition': 'normal',  # normal / low / debug (debug still bills the account, it just has a higher priority)
                 'constraint': 'gpu',  # potential specific request about architecture
@@ -222,11 +220,11 @@ def eval_function_parallel_swarm(parameters_sets, args):
         hpc_jobs = HPCJobs(hpc_username, jobs, ns.user_config['nb_hpc_slots'], slurm_single_job_args, gmx_path=ns.user_config['gmx_path'])
 
         # check how much exec time is remaining on the Master execution and verify we can run a full SWARM iteration
-        ns.master_job_id, ts_master_elapsed, ts_master_total = hpc_jobs.get_master_time(master_job_name=ns.user_config['master_job_name'])
+        ns.master_job_id, ts_master_elapsed, ts_master_total = hpc_jobs.get_master_time(master_job_name=ns.master_job_name)
         delta_ts_master_remaining = ts_master_total - ts_master_elapsed
-        # 30% margin because we do NOT know at which speed future jobs will enter the SLURM queue
+        # 50% margin because we do NOT know at which speed future jobs will enter the SLURM queue
         # 0% margin if we run on the long queue because we hardly will have the last iter being worst than the worst of 7 days
-        time_margin = 0.0
+        time_margin = 0.5
         ts_master_elapsed_h = round(ts_master_elapsed / (60 * 60), 3)
         ts_master_total_h = round(ts_master_total / (60 * 60), 3)
         ts_master_total_time_perc = round(ts_master_elapsed / ts_master_total * 100, 2)

@@ -293,16 +293,20 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
         if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI2':
             fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('P4', 72))
 
-        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'].startswith('MARTINI3'):
+        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3REMAP':
             fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('WN', 72))
+
+        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3':
+            fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('W', 72))
 
         fp.write('''\n[ nonbond_params ]
 ;  part part   func sig      eps\n''')
 
-        # radii come first in the vector of parameters for this iteration
+        # radii come before LJ EPS in the vector of parameters
         if ns.user_config['tune_radii']:
+            new_radii = {}
             for radii_grp in sorted(ns.user_config['tune_radii_in_groups']):
-                ns.user_config['init_beads_radii'][radii_grp] = parameters_set[param_cursor]
+                new_radii[radii_grp] = parameters_set[param_cursor]
                 param_cursor += 1
 
         # plot a matrix of LJ EPS interactions strength
@@ -312,15 +316,15 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
 
         # write the FF file
         for nb_LJ in range(len(ns.all_beads_pairs)):
-            beads_pair = ns.all_beads_pairs[nb_LJ]
-            bead_type_1, bead_type_2 = beads_pair
+            bead_type_1, bead_type_2 = ns.all_beads_pairs[nb_LJ]
+            bead_pair = ' '.join(ns.all_beads_pairs[nb_LJ])
 
             if ns.user_config['tune_radii']:
-                sig = ns.user_config.init_beads_radii[ns.reverse_radii_mapping[bead_type_1]] + ns.user_config.init_beads_radii[ns.reverse_radii_mapping[bead_type_2]]  # here sig is the sum of radii of each bead type
+                sig = new_radii[ns.reverse_radii_mapping[bead_type_1]] + new_radii[ns.reverse_radii_mapping[bead_type_2]]  # here sig is the sum of radii of each bead type
             else:
-                sig = ns.user_config['init_nonbonded'][' '.join(ns.all_beads_pairs[nb_LJ])]['sig']  # here the sig is predefined
+                sig = ns.user_config['init_nonbonded'][bead_pair]['sig']  # here the sig is predefined
 
-            if ns.user_config['tune_epsilons']:
+            if ns.user_config['tune_epsilons'] == 'all' or bead_pair in ns.user_config['tune_epsilons']:
                 eps = parameters_set[param_cursor]  # get the LJ from the optimizer
                 param_cursor += 1
             else:
@@ -376,7 +380,7 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
 
 ''')
 
-        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'].startswith('MARTINI3'):
+        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3REMAP':
 
             water2beads = {
                 'Q0': '     WN Q0     1    0.470   5.070\n',
@@ -406,6 +410,36 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
  1 	WN  	1 	WN  	WN 	1 	0 
 
 ''')
+
+        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3':
+
+            water2beads = {
+                'Q1': '     W  Q1     1    0.465   5.220\n',
+                'Q5': '     W  Q5     1    0.465   6.340\n',
+                'N4a': '     W  N4a    1    0.465   3.500\n',
+                'C1': '     W  C1     1    0.470   2.060\n',
+                'C4h': '     W  C4h    1    0.465   2.420\n',
+                'SN4a': '     W  SN4a   1    0.425   3.000\n'
+            }
+
+            fp.write('     W  W      1    0.470   4.650\n')  # this one is always present
+
+            for bead_type in ns.all_beads_types:  # the other are not forcefully mandatory
+                fp.write(water2beads[bead_type])
+
+            fp.write('''
+
+    ;;;;;; WATER (representing 4 H2O molecules)
+
+    [ moleculetype ]
+    ; molname  	nrexcl
+      W  	    	1
+
+    [ atoms ]
+    ;id 	type 	resnr 	residu 	atom 	cgnr 	charge
+     1 	W  	1 	W  	W 	1 	0 
+
+    ''')
 
     return
 

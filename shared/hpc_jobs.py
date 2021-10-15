@@ -20,7 +20,7 @@ class HPCJobs:
 
     # NOTE: do NOT reduce argument 'kill_delay'
 
-    def __init__(self, hpc_username, jobs, hpc_nb_slots, slurm_single_job_config, kill_delay=600, gmx_path='gmx'):
+    def __init__(self, hpc_username, jobs, hpc_nb_slots, slurm_single_job_config, kill_delay=600, gmx_path='gmx_mpi'):
         self.hpc_username = hpc_username
         self.jobs = jobs
         for job_name in jobs:
@@ -31,7 +31,7 @@ class HPCJobs:
                 'equi_byte_size': 0,
                 'prod_byte_size': 0
             }
-        self.hpc_nb_slots = hpc_nb_slots
+        self.hpc_nb_slots = int(hpc_nb_slots)
         self.slurm_single_job_config = slurm_single_job_config  # TODO: check that the provided SLURM arguments are all valid
         self.kill_delay = kill_delay  # number of seconds after which we kill a job that has NOT been writting in its log files
         self.gmx_path = gmx_path
@@ -250,13 +250,15 @@ class HPCJobs:
                 f'''\n    if test -f "equi.tpr"; then'''  # IF EQUI SETUP IS OK
                 f'''\n      sleep $[ ( $RANDOM % 11 )  + 5 ]s'''  # sleep a little in case all jobs would start at the same time
                 # f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN EQUI
-                f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -bonded cpu -nb cpu'''  # RUN EQUI
+                # f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN EQUI
+                f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 1 1 4  -rdd 1.8 -bonded cpu -nb cpu'''  # 8BEADS
                 f'''\n      if test -f "equi.gro"; then'''  # IF EQUI FINISHED CORRECTLY
                 f'''\n        gmx grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod'''  # SETUP PROD
                 f'''\n        if test -f "prod.tpr"; then'''  # IF PROD SETUP IS OK
                 f'''\n          sleep $[ ( $RANDOM % 11 )  + 5 ]s'''  # sleep a little in case all jobs would start at the same time
                 # f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN PROD
-                f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -bonded cpu -nb cpu'''  # RUN PROD
+                # f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN PROD
+                f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 1 1 4  -rdd 1.8 -bonded cpu -nb cpu'''  # 8BEADS
                 f'''\n        fi'''
                 f'''\n      fi'''
                 f'''\n    fi'''
