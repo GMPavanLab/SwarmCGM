@@ -66,6 +66,12 @@ def get_CG_angles_distrib_lipids(ns, beads_ids, cg_iter_universe):
 # compare 2 models -- atomistic and CG models with plotting
 def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.tpr', xtc_file='prod.xtc'):
 
+    # find if user has specified that we make use of the simulations available for this lipid
+    # in the bottom-up component of the score
+    bottom_up_active = False
+    if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+        bottom_up_active = True
+
     # graphical parameters
     plt.rcParams['grid.color'] = 'k'  # plt grid appearance settings
     plt.rcParams['grid.linestyle'] = ':'
@@ -81,7 +87,7 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
     cg_iter_universe = mda.Universe(tpr_file, xtc_file, in_memory=True, refresh_offsets=True, guess_bonds=False)
 
     # select each molecule as an MDA atomgroup and make its coordinates whole, inplace, across the complete CG trajectory
-    for ts in cg_iter_universe.trajectory:
+    for _ in cg_iter_universe.trajectory:
         # make each lipid whole
         for i in range(cg_map_itp['meta']['nb_mols']):
             cg_mol = mda.AtomGroup(
@@ -242,6 +248,7 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
 
     # 3. get geoms distributions
     geoms_start = datetime.now().timestamp()
+
     # constraints
     for grp_constraint in range(cg_map_itp['meta']['nb_constraints']):
         try:
@@ -249,10 +256,11 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
             cg_iter_itp['geoms']['constraint'][grp_constraint]['avg'], \
             cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'] = get_CG_bonds_distrib_lipids(ns, cg_map_itp[
                 'constraint'][grp_constraint]['beads'], cg_iter_universe, ns.bins_constraints, ns.user_config['bw_constraints'])
-            cg_iter_itp['geoms']['constraint'][grp_constraint]['emd'] = emd(
-                cg_map_itp['constraint'][grp_constraint]['hist_' + temp],
-                cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'],
-                ns.bins_constraints_dist_matrix) * ns.user_config['bonds2angles_scoring_factor']
+            if bottom_up_active:
+                cg_iter_itp['geoms']['constraint'][grp_constraint]['emd'] = emd(
+                    cg_map_itp['constraint'][grp_constraint]['hist_' + temp],
+                    cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'],
+                    ns.bins_constraints_dist_matrix) * ns.user_config['bonds2angles_scoring_factor']
         except IndexError:
             sys.exit(
                 config.header_error + 'Most probably because you have constraints or constraints that exceed ' + str(
@@ -264,9 +272,10 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
             cg_iter_itp['geoms']['bond'][grp_bond]['avg'], cg_iter_itp['geoms']['bond'][grp_bond][
                 'hist'] = get_CG_bonds_distrib_lipids(ns, cg_map_itp['bond'][grp_bond]['beads'], cg_iter_universe,
                                                       ns.bins_bonds, ns.user_config['bw_bonds'])
-            cg_iter_itp['geoms']['bond'][grp_bond]['emd'] = emd(cg_map_itp['bond'][grp_bond]['hist_' + temp],
-                                                                cg_iter_itp['geoms']['bond'][grp_bond]['hist'],
-                                                                ns.bins_bonds_dist_matrix) * ns.user_config['bonds2angles_scoring_factor']
+            if bottom_up_active:
+                cg_iter_itp['geoms']['bond'][grp_bond]['emd'] = emd(cg_map_itp['bond'][grp_bond]['hist_' + temp],
+                                                                    cg_iter_itp['geoms']['bond'][grp_bond]['hist'],
+                                                                    ns.bins_bonds_dist_matrix) * ns.user_config['bonds2angles_scoring_factor']
         except IndexError:
             sys.exit(config.header_error + 'Most probably because you have bonds or constraints that exceed ' + str(
                 ns.bonded_max_range) + ' nm, try to increase grid size')
@@ -275,9 +284,10 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
         cg_iter_itp['geoms']['angle'][grp_angle] = {'avg': None, 'hist': None}
         cg_iter_itp['geoms']['angle'][grp_angle]['avg'], cg_iter_itp['geoms']['angle'][grp_angle][
             'hist'] = get_CG_angles_distrib_lipids(ns, cg_map_itp['angle'][grp_angle]['beads'], cg_iter_universe)
-        cg_iter_itp['geoms']['angle'][grp_angle]['emd'] = emd(cg_map_itp['angle'][grp_angle]['hist_' + temp],
-                                                              cg_iter_itp['geoms']['angle'][grp_angle]['hist'],
-                                                              ns.bins_angles_dist_matrix)
+        if bottom_up_active:
+            cg_iter_itp['geoms']['angle'][grp_angle]['emd'] = emd(cg_map_itp['angle'][grp_angle]['hist_' + temp],
+                                                                  cg_iter_itp['geoms']['angle'][grp_angle]['hist'],
+                                                                  ns.bins_angles_dist_matrix)
 
     geoms_time = datetime.now().timestamp() - geoms_start
 
@@ -322,19 +332,22 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
         for grp_constraint in range(ncols):
             if grp_constraint < cg_map_itp['meta']['nb_constraints']:
 
-                ax[nrow][grp_constraint].set_title(
-                    'Constraint ' + str(grp_constraint + 1) + ' - Grp ' + cg_map_itp['constraint'][grp_constraint][
-                        'geom_grp'] + ' - Δ ' + str(
-                        round(cg_iter_itp['geoms']['constraint'][grp_constraint]['emd'], 2)))
-
-                ax[nrow][grp_constraint].plot(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
-                                              cg_map_itp['constraint'][grp_constraint]['hist_' + temp], label='AA',
-                                              color=config.atom_color[0], alpha=config.line_alpha)
-                ax[nrow][grp_constraint].fill_between(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
-                                                      cg_map_itp['constraint'][grp_constraint]['hist_' + temp],
-                                                      color=config.atom_color[0], alpha=config.fill_alpha)
-                ax[nrow][grp_constraint].plot(cg_map_itp['constraint'][grp_constraint]['avg_' + temp], 0,
-                                              color=config.atom_color[0], marker='D', alpha=config.line_alpha)
+                if bottom_up_active:
+                    ax[nrow][grp_constraint].set_title(
+                        'Constraint ' + str(grp_constraint + 1) + ' - Grp ' + cg_map_itp['constraint'][grp_constraint][
+                            'geom_grp'] + ' - Δ ' + str(
+                            round(cg_iter_itp['geoms']['constraint'][grp_constraint]['emd'], 2)))
+                    ax[nrow][grp_constraint].plot(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
+                                                  cg_map_itp['constraint'][grp_constraint]['hist_' + temp], label='AA',
+                                                  color=config.atom_color[0], alpha=config.line_alpha)
+                    ax[nrow][grp_constraint].fill_between(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
+                                                          cg_map_itp['constraint'][grp_constraint]['hist_' + temp],
+                                                          color=config.atom_color[0], alpha=config.fill_alpha)
+                    ax[nrow][grp_constraint].plot(cg_map_itp['constraint'][grp_constraint]['avg_' + temp], 0,
+                                                  color=config.atom_color[0], marker='D', alpha=config.line_alpha)
+                else:
+                    ax[nrow][grp_constraint].set_title(
+                        'Constraint ' + str(grp_constraint + 1) + ' - Grp ' + cg_map_itp['constraint'][grp_constraint]['geom_grp'])
 
                 ax[nrow][grp_constraint].plot(ns.bins_constraints[:-1] + ns.user_config['bw_constraints'] / 2,
                                               cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'], label='CG',
@@ -352,12 +365,12 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                 ax[nrow][grp_constraint].legend()
 
                 for i in range(len(ns.bins_constraints[:-1])):
-                    if cg_map_itp['constraint'][grp_constraint]['hist_' + temp][i] != 0 or \
+                    if (bottom_up_active and cg_map_itp['constraint'][grp_constraint]['hist_' + temp][i] != 0) or \
                             cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'][i] != 0:
                         pranges['x']['constraint'][grp_constraint] = [ns.bins_constraints[:-1][i], None]
                         break
                 for i in range(len(ns.bins_constraints[:-1]) - 1, -1, -1):  # reverse
-                    if cg_map_itp['constraint'][grp_constraint]['hist_' + temp][i] != 0 or \
+                    if (bottom_up_active and cg_map_itp['constraint'][grp_constraint]['hist_' + temp][i] != 0) or \
                             cg_iter_itp['geoms']['constraint'][grp_constraint]['hist'][i] != 0:
                         pranges['x']['constraint'][grp_constraint][1] = ns.bins_constraints[:-1][
                                                                             i] + ns.user_config['bw_constraints'] / 2
@@ -390,18 +403,21 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
         for grp_bond in range(ncols):
             if grp_bond < cg_map_itp['meta']['nb_bonds']:
 
-                ax[nrow][grp_bond].set_title(
-                    'Bond ' + str(grp_bond + 1) + ' - Grp ' + cg_map_itp['bond'][grp_bond]['geom_grp'] + ' - Δ ' + str(
-                        round(cg_iter_itp['geoms']['bond'][grp_bond]['emd'], 2)))
-
-                ax[nrow][grp_bond].plot(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
-                                        cg_map_itp['bond'][grp_bond]['hist_' + temp], label='AA',
-                                        color=config.atom_color[0], alpha=config.line_alpha)
-                ax[nrow][grp_bond].fill_between(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
-                                                cg_map_itp['bond'][grp_bond]['hist_' + temp],
-                                                color=config.atom_color[0], alpha=config.fill_alpha)
-                ax[nrow][grp_bond].plot(cg_map_itp['bond'][grp_bond]['avg_' + temp], 0, color=config.atom_color[0],
-                                        marker='D', alpha=config.line_alpha)
+                if bottom_up_active:
+                    ax[nrow][grp_bond].set_title(
+                        'Bond ' + str(grp_bond + 1) + ' - Grp ' + cg_map_itp['bond'][grp_bond]['geom_grp'] + ' - Δ ' + str(
+                            round(cg_iter_itp['geoms']['bond'][grp_bond]['emd'], 2)))
+                    ax[nrow][grp_bond].plot(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
+                                            cg_map_itp['bond'][grp_bond]['hist_' + temp], label='AA',
+                                            color=config.atom_color[0], alpha=config.line_alpha)
+                    ax[nrow][grp_bond].fill_between(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
+                                                    cg_map_itp['bond'][grp_bond]['hist_' + temp],
+                                                    color=config.atom_color[0], alpha=config.fill_alpha)
+                    ax[nrow][grp_bond].plot(cg_map_itp['bond'][grp_bond]['avg_' + temp], 0, color=config.atom_color[0],
+                                            marker='D', alpha=config.line_alpha)
+                else:
+                    ax[nrow][grp_bond].set_title(
+                        'Bond ' + str(grp_bond + 1) + ' - Grp ' + cg_map_itp['bond'][grp_bond]['geom_grp'])
 
                 ax[nrow][grp_bond].plot(ns.bins_bonds[:-1] + ns.user_config['bw_bonds'] / 2,
                                         cg_iter_itp['geoms']['bond'][grp_bond]['hist'], label='CG',
@@ -419,13 +435,11 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                 ax[nrow][grp_bond].legend()
 
                 for i in range(len(ns.bins_bonds[:-1])):
-                    if cg_map_itp['bond'][grp_bond]['hist_' + temp][i] != 0 or \
-                            cg_iter_itp['geoms']['bond'][grp_bond]['hist'][i] != 0:
+                    if (bottom_up_active and cg_map_itp['bond'][grp_bond]['hist_' + temp][i] != 0) or cg_iter_itp['geoms']['bond'][grp_bond]['hist'][i] != 0:
                         pranges['x']['bond'][grp_bond] = [ns.bins_bonds[:-1][i], None]
                         break
                 for i in range(len(ns.bins_bonds[:-1]) - 1, -1, -1):  # reverse
-                    if cg_map_itp['bond'][grp_bond]['hist_' + temp][i] != 0 or \
-                            cg_iter_itp['geoms']['bond'][grp_bond]['hist'][i] != 0:
+                    if (bottom_up_active and cg_map_itp['bond'][grp_bond]['hist_' + temp][i] != 0) or cg_iter_itp['geoms']['bond'][grp_bond]['hist'][i] != 0:
                         pranges['x']['bond'][grp_bond][1] = ns.bins_bonds[:-1][i] + ns.user_config['bw_bonds'] / 2
                         break
                 pranges['x_range_max']['bond'] = max(pranges['x_range_max']['bond'],
@@ -455,18 +469,21 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
         for grp_angle in range(ncols):
             if grp_angle < cg_map_itp['meta']['nb_angles']:
 
-                ax[nrow][grp_angle].set_title(
-                    'Angle ' + str(grp_angle + 1) + ' - Grp ' + cg_map_itp['angle'][grp_angle][
-                        'geom_grp'] + ' - Δ ' + str(round(cg_iter_itp['geoms']['angle'][grp_angle]['emd'], 2)))
-
-                ax[nrow][grp_angle].plot(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
-                                         cg_map_itp['angle'][grp_angle]['hist_' + temp], label='AA',
-                                         color=config.atom_color[0], alpha=config.line_alpha)
-                ax[nrow][grp_angle].fill_between(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
-                                                 cg_map_itp['angle'][grp_angle]['hist_' + temp],
-                                                 color=config.atom_color[0], alpha=config.fill_alpha)
-                ax[nrow][grp_angle].plot(cg_map_itp['angle'][grp_angle]['avg_' + temp], 0, color=config.atom_color[0],
-                                         marker='D', alpha=config.line_alpha)
+                if bottom_up_active:
+                    ax[nrow][grp_angle].set_title(
+                        'Angle ' + str(grp_angle + 1) + ' - Grp ' + cg_map_itp['angle'][grp_angle][
+                            'geom_grp'] + ' - Δ ' + str(round(cg_iter_itp['geoms']['angle'][grp_angle]['emd'], 2)))
+                    ax[nrow][grp_angle].plot(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
+                                             cg_map_itp['angle'][grp_angle]['hist_' + temp], label='AA',
+                                             color=config.atom_color[0], alpha=config.line_alpha)
+                    ax[nrow][grp_angle].fill_between(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
+                                                     cg_map_itp['angle'][grp_angle]['hist_' + temp],
+                                                     color=config.atom_color[0], alpha=config.fill_alpha)
+                    ax[nrow][grp_angle].plot(cg_map_itp['angle'][grp_angle]['avg_' + temp], 0, color=config.atom_color[0],
+                                             marker='D', alpha=config.line_alpha)
+                else:
+                    ax[nrow][grp_angle].set_title(
+                        'Angle ' + str(grp_angle + 1) + ' - Grp ' + cg_map_itp['angle'][grp_angle]['geom_grp'])
 
                 ax[nrow][grp_angle].plot(ns.bins_angles[:-1] + ns.user_config['bw_angles'] / 2,
                                          cg_iter_itp['geoms']['angle'][grp_angle]['hist'], label='CG',
@@ -483,12 +500,12 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                 ax[nrow][grp_angle].legend()
 
                 for i in range(len(ns.bins_angles[:-1])):
-                    if cg_map_itp['angle'][grp_angle]['hist_' + temp][i] != 0 or \
+                    if (bottom_up_active and cg_map_itp['angle'][grp_angle]['hist_' + temp][i] != 0) or \
                             cg_iter_itp['geoms']['angle'][grp_angle]['hist'][i] != 0:
                         pranges['x']['angle'][grp_angle] = [ns.bins_angles[:-1][i], None]
                         break
                 for i in range(len(ns.bins_angles[:-1]) - 1, -1, -1):  # reverse
-                    if cg_map_itp['angle'][grp_angle]['hist_' + temp][i] != 0 or \
+                    if (bottom_up_active and cg_map_itp['angle'][grp_angle]['hist_' + temp][i] != 0) or \
                             cg_iter_itp['geoms']['angle'][grp_angle]['hist'][i] != 0:
                         pranges['x']['angle'][grp_angle][1] = ns.bins_angles[:-1][i] + ns.user_config['bw_angles'] / 2
                         break
@@ -519,58 +536,58 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
     delta_geoms = 0
     delta_geoms_per_grp = {}
     raw_delta_geoms = [[], []]  # bonds and angles separately
-    for grp_constraint in range(cg_map_itp['meta']['nb_constraints']):
-        geom_grp = ns.cg_itps[lipid_code]['constraint'][grp_constraint]['geom_grp']
-        geom_error = cg_iter_itp['geoms']['constraint'][grp_constraint]['emd']  # ns.constraints2angles_scoring_factor already applied
-        # delta_geoms += geom_error ** 2  # this is used for scoring of the current evaluation
-        geom_grps_counter[geom_grp] += 1
-        if geom_grp in delta_geoms_per_grp:
-            delta_geoms_per_grp[geom_grp].append(geom_error)
-        else:
-            delta_geoms_per_grp[geom_grp] = [geom_error]
 
-        error_data['constraints'][geom_grp] += geom_error  # this is used for directed swarm initialization
-        raw_delta_geoms[0].append(cg_iter_itp['geoms']['constraint'][grp_constraint]['emd'])  # currently unused
+    if bottom_up_active:
 
-    for grp_bond in range(cg_map_itp['meta']['nb_bonds']):
-        geom_grp = ns.cg_itps[lipid_code]['bond'][grp_bond]['geom_grp']
-        geom_grps_counter[geom_grp] += 1
-        geom_error = cg_iter_itp['geoms']['bond'][grp_bond]['emd']  # ns.bonds2angles_scoring_factor already applied
-        # delta_geoms += geom_error ** 2  # this is used for scoring of the current evaluation
-        geom_grps_counter[geom_grp] += 1
-        if geom_grp in delta_geoms_per_grp:
-            delta_geoms_per_grp[geom_grp].append(geom_error)
-        else:
-            delta_geoms_per_grp[geom_grp] = [geom_error]
+        for grp_constraint in range(cg_map_itp['meta']['nb_constraints']):
+            geom_grp = ns.cg_itps[lipid_code]['constraint'][grp_constraint]['geom_grp']
+            geom_error = cg_iter_itp['geoms']['constraint'][grp_constraint]['emd']  # ns.constraints2angles_scoring_factor already applied
+            geom_grps_counter[geom_grp] += 1
+            if geom_grp in delta_geoms_per_grp:
+                delta_geoms_per_grp[geom_grp].append(geom_error)
+            else:
+                delta_geoms_per_grp[geom_grp] = [geom_error]
 
-        error_data['bonds'][geom_grp] += geom_error  # this is used for directed swarm initialization
-        raw_delta_geoms[0].append(cg_iter_itp['geoms']['bond'][grp_bond]['emd'])  # currently unused
+            error_data['constraints'][geom_grp] += geom_error  # this is used for directed swarm initialization
+            raw_delta_geoms[0].append(cg_iter_itp['geoms']['constraint'][grp_constraint]['emd'])  # currently unused
 
-    for grp_angle in range(cg_map_itp['meta']['nb_angles']):
-        geom_grp = ns.cg_itps[lipid_code]['angle'][grp_angle]['geom_grp']
-        geom_grps_counter[geom_grp] += 1
-        geom_error = cg_iter_itp['geoms']['angle'][grp_angle]['emd']
-        # delta_geoms += geom_error ** 2  # this is used for scoring of the current evaluation
-        geom_grps_counter[geom_grp] += 1
-        if geom_grp in delta_geoms_per_grp:
-            delta_geoms_per_grp[geom_grp].append(geom_error)
-        else:
-            delta_geoms_per_grp[geom_grp] = [geom_error]
+        for grp_bond in range(cg_map_itp['meta']['nb_bonds']):
+            geom_grp = ns.cg_itps[lipid_code]['bond'][grp_bond]['geom_grp']
+            geom_grps_counter[geom_grp] += 1
+            geom_error = cg_iter_itp['geoms']['bond'][grp_bond]['emd']  # ns.bonds2angles_scoring_factor already applied
+            geom_grps_counter[geom_grp] += 1
+            if geom_grp in delta_geoms_per_grp:
+                delta_geoms_per_grp[geom_grp].append(geom_error)
+            else:
+                delta_geoms_per_grp[geom_grp] = [geom_error]
 
-        error_data['angles'][geom_grp] += geom_error  # this is used for directed swarm initialization
-        raw_delta_geoms[1].append(cg_iter_itp['geoms']['angle'][grp_angle]['emd'])  # currently unused
+            error_data['bonds'][geom_grp] += geom_error  # this is used for directed swarm initialization
+            raw_delta_geoms[0].append(cg_iter_itp['geoms']['bond'][grp_bond]['emd'])  # currently unused
 
-    # delta_geoms = np.sqrt(delta_geoms / (
-    #             cg_map_itp['meta']['nb_constraints'] + cg_map_itp['meta']['nb_bonds'] + cg_map_itp['meta']['nb_angles']))
+        for grp_angle in range(cg_map_itp['meta']['nb_angles']):
+            geom_grp = ns.cg_itps[lipid_code]['angle'][grp_angle]['geom_grp']
+            geom_grps_counter[geom_grp] += 1
+            geom_error = cg_iter_itp['geoms']['angle'][grp_angle]['emd']
+            geom_grps_counter[geom_grp] += 1
+            if geom_grp in delta_geoms_per_grp:
+                delta_geoms_per_grp[geom_grp].append(geom_error)
+            else:
+                delta_geoms_per_grp[geom_grp] = [geom_error]
 
-    delta_geoms = 0
-    for geom_grp in delta_geoms_per_grp:
-        delta_geoms += (np.sqrt(np.sum([delta_geom ** 2 for delta_geom in delta_geoms_per_grp[geom_grp]]) / len(delta_geoms_per_grp[geom_grp])) ** 2)
-    delta_geoms = np.sqrt(delta_geoms / len(delta_geoms_per_grp))
+            error_data['angles'][geom_grp] += geom_error  # this is used for directed swarm initialization
+            raw_delta_geoms[1].append(cg_iter_itp['geoms']['angle'][grp_angle]['emd'])  # currently unused
+
+        for geom_grp in delta_geoms_per_grp:
+            delta_geoms += (np.sqrt(np.sum([delta_geom ** 2 for delta_geom in delta_geoms_per_grp[geom_grp]]) / len(delta_geoms_per_grp[geom_grp])) ** 2)
+        delta_geoms = np.sqrt(delta_geoms / len(delta_geoms_per_grp))
 
     plot_filename = 'GEOMS_' + lipid_code + '_' + temp + '.png'
-    sup_title = lipid_code + ' ' + temp + ' -- Geoms: ' + str(round(delta_geoms, 2)) + ' -- APL: ' + str(
-        round(cg_iter_itp['apl']['avg'], 2)) + ' -- Dhh: ' + str(round(cg_iter_itp['Dhh']['avg'], 2))
+    if bottom_up_active:
+        sup_title = lipid_code + ' ' + temp + ' -- Geoms: ' + str(round(delta_geoms, 2)) + ' -- APL: ' + str(
+            round(cg_iter_itp['apl']['avg'], 2)) + ' -- Dhh: ' + str(round(cg_iter_itp['Dhh']['avg'], 2))
+    else:
+        sup_title = lipid_code + ' ' + temp + ' -- Geoms: Inactive -- APL: ' + str(
+            round(cg_iter_itp['apl']['avg'], 2)) + ' -- Dhh: ' + str(round(cg_iter_itp['Dhh']['avg'], 2))
     plt.suptitle(sup_title)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig(plot_filename)
@@ -611,48 +628,51 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
     # Calculate the EMD / RDF scores according to the given cutoff radius
     nb_beads_types = len(ns.lipid_beads_types[lipid_code])
 
-    for i in range(nb_beads_types):  # matrix of LJ
-        for j in range(nb_beads_types):
+    if bottom_up_active:
+        for i in range(nb_beads_types):  # matrix of LJ
+            for j in range(nb_beads_types):
 
-            if j >= i:
-                bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], ns.lipid_beads_types[lipid_code][j]
-                pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
-                aa_rdf, _ = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]  # count, norm
+                if j >= i:
+                    bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], ns.lipid_beads_types[lipid_code][j]
+                    pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
+                    aa_rdf, _ = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]  # count, norm
 
-                # score
-                if cg_eval_rdfs_short[pair_type][0][0] is not None:
+                    # score
+                    if cg_eval_rdfs_short[pair_type][0][0] is not None:
 
-                    count_diff_penalty = (max(np.sum(aa_rdf), np.sum(cg_eval_rdfs_short[pair_type][0])) / min(
-                        np.sum(aa_rdf), np.sum(cg_eval_rdfs_short[pair_type][0])) - 1) * 100
-                    hist_AA_EMD = aa_rdf / ((np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][0])) / 2)
-                    hist_CG_EMD = cg_eval_rdfs_short[pair_type][0] / (
-                                (np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][0])) / 2)
+                        count_diff_penalty = (max(np.sum(aa_rdf), np.sum(cg_eval_rdfs_short[pair_type][0])) / min(
+                            np.sum(aa_rdf), np.sum(cg_eval_rdfs_short[pair_type][0])) - 1) * 100
+                        hist_AA_EMD = aa_rdf / ((np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][0])) / 2)
+                        hist_CG_EMD = cg_eval_rdfs_short[pair_type][0] / (
+                                    (np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][0])) / 2)
 
-                    cg_iter_itp['rdfs_short'][pair_type] = min(round(emd(hist_AA_EMD, hist_CG_EMD, ns.bins_vol_matrix,
-                                                                         extra_mass_penalty=0) * 100 + count_diff_penalty,
-                                                                     3),
-                                                               100)  # distance matrix with radial shell volume using NOT normalized data
-                else:
-                    cg_iter_itp['rdfs_short'][pair_type] = 100
+                        cg_iter_itp['rdfs_short'][pair_type] = min(round(emd(hist_AA_EMD, hist_CG_EMD, ns.bins_vol_matrix,
+                                                                             extra_mass_penalty=0) * 100 + count_diff_penalty,
+                                                                         3),
+                                                                   100)  # distance matrix with radial shell volume using NOT normalized data
+                    else:
+                        cg_iter_itp['rdfs_short'][pair_type] = 100
 
     # calculate score components + error estimations -- rdfs
     delta_rdfs = 0
     delta_rdfs_per_grp = {}
-    # delta_rdfs = np.array([])
-    for pair_type in cg_iter_itp['rdfs_short']:
 
-        bead_type_1, bead_type_2 = pair_type.split('_')
-        rdf_error = cg_iter_itp['rdfs_short'][pair_type]
-        delta_rdfs += rdf_error ** 2
-        delta_rdfs_per_grp[pair_type] = rdf_error
+    if bottom_up_active:
+        for pair_type in cg_iter_itp['rdfs_short']:
 
-        error_data['rdf_pair'][
-            pair_type] = rdf_error  # this is used for directed swarm initialization -- this does NOT need averaging
-        error_data['rdf_bead'][bead_type_1] += rdf_error  # this is used for directed swarm initialization
-        beads_types_counter[bead_type_1] += 1
-        error_data['rdf_bead'][bead_type_2] += rdf_error  # this is used for directed swarm initialization
-        beads_types_counter[bead_type_2] += 1
+            bead_type_1, bead_type_2 = pair_type.split('_')
+            rdf_error = cg_iter_itp['rdfs_short'][pair_type]
+            delta_rdfs += rdf_error ** 2
+            delta_rdfs_per_grp[pair_type] = rdf_error  # the RMSE here will be done later, over all pairs of 2 given bead types
 
+            error_data['rdf_pair'][pair_type] = rdf_error  # this is used for directed swarm initialization -- this does NOT need averaging
+            error_data['rdf_bead'][bead_type_1] += rdf_error  # this is used for directed swarm initialization
+            beads_types_counter[bead_type_1] += 1
+            error_data['rdf_bead'][bead_type_2] += rdf_error  # this is used for directed swarm initialization
+            beads_types_counter[bead_type_2] += 1
+
+        # this is NOT directly used in the score, this quantity here only gives the error per lipid
+        # that is stored in the logs and displayed in plots (analysis + RDFs plot per lipid)
         delta_rdfs = np.sqrt(delta_rdfs / len(cg_iter_itp['rdfs_short']))
 
     # RDF plots at the given cutoff
@@ -665,16 +685,17 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
             if j >= i:
                 bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], ns.lipid_beads_types[lipid_code][j]
                 pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
-                _, aa_rdf = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]  # count, norm
 
-                # score
-                if cg_eval_rdfs_short[pair_type][0][0] != None:
-                    hist_AA_display = aa_rdf / ((np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
-                    hist_CG_display = cg_eval_rdfs_short[pair_type][1] / (
-                                (np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
-
-                    ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_AA_display, label='AA',
+                # display RDF
+                if cg_eval_rdfs_short[pair_type][0][0] is not None:
+                    if bottom_up_active:
+                        _, aa_rdf = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]  # count, norm
+                        hist_AA_display = aa_rdf / ((np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
+                        ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_AA_display, label='AA',
                                   alpha=config.rdf_alpha, color=config.atom_color[0])  # aa ref
+                        hist_CG_display = cg_eval_rdfs_short[pair_type][1] / ((np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
+                    else:
+                        hist_CG_display = cg_eval_rdfs_short[pair_type][1]
                     ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_CG_display, label='CG',
                                   alpha=config.rdf_alpha, color=config.cg_color)  # cg for this eval
                 else:
@@ -688,16 +709,19 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                 ax[i][j].axvline(sig, label='Sig', ls='dashed', color='black', alpha=0.5)
 
                 ax[i][j].set_xlim(0, ns.user_config['cutoff_rdfs'])
-                ax[i][j].set_title(
-                    bead_type_1 + ' ' + bead_type_2 + ' - RDF Δ ' + str(round(cg_iter_itp['rdfs_short'][pair_type], 2)))
+                if bottom_up_active:
+                    ax[i][j].set_title(f"{bead_type_1} {bead_type_2} - RDF Δ {round(cg_iter_itp['rdfs_short'][pair_type], 2)}")
+                else:
+                    ax[i][j].set_title(f"{bead_type_1} {bead_type_2} - RDF Δ Inactive")
                 ax[i][j].grid()
                 ax[i][j].legend()
             else:
                 ax[i][j].set_visible(False)
 
-    plt.suptitle(lipid_code + ' ' + temp + ' -- Geoms: ' + str(round(delta_geoms, 2)) + ' -- RDF: ' + str(
-        round(delta_rdfs, 2)) + ' -- APL: ' + str(round(cg_iter_itp['apl']['avg'], 2)) + ' -- Dhh: ' + str(
-        round(cg_iter_itp['Dhh']['avg'], 2)))
+    if bottom_up_active:
+        plt.suptitle(f"{lipid_code} {temp} -- Geoms: {round(delta_geoms, 2)} -- RDF: {round(delta_rdfs, 2)} -- APL: {round(cg_iter_itp['apl']['avg'], 2)} -- Dhh: {round(cg_iter_itp['Dhh']['avg'], 2)}")
+    else:
+        plt.suptitle(f"{lipid_code} {temp} -- Geoms: Inactive -- RDF: Inactive -- APL: {round(cg_iter_itp['apl']['avg'], 2)} -- Dhh: {round(cg_iter_itp['Dhh']['avg'], 2)}")
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig('RDF_SHELL_NORM_' + lipid_code + '_' + temp + '_cutoff_' + str(ns.user_config['cutoff_rdfs']) + '_nm.png')
     plt.close(fig)
@@ -712,16 +736,17 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
             if j >= i:
                 bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], ns.lipid_beads_types[lipid_code][j]
                 pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
-                _, aa_rdf = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]  # count, norm
 
-                # score
-                if cg_eval_rdfs_short[pair_type][0][0] != None:
-                    hist_AA_display = aa_rdf / ((np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
-                    hist_CG_display = cg_eval_rdfs_short[pair_type][1] / (
-                                (np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
-
-                    ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_AA_display, label='AA',
-                                  alpha=config.rdf_alpha, color=config.atom_color[0])  # aa ref
+                # display RDF
+                if cg_eval_rdfs_short[pair_type][0][0] is not None:
+                    if bottom_up_active:
+                        _, aa_rdf = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]  # count, norm
+                        hist_AA_display = aa_rdf / ((np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
+                        ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_AA_display, label='AA',
+                                      alpha=config.rdf_alpha, color=config.atom_color[0])  # aa ref
+                        hist_CG_display = cg_eval_rdfs_short[pair_type][1] / ((np.sum(aa_rdf) + np.sum(cg_eval_rdfs_short[pair_type][1])) / 2)
+                    else:
+                        hist_CG_display = cg_eval_rdfs_short[pair_type][1]
                     ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, hist_CG_display, label='CG',
                                   alpha=config.rdf_alpha, color=config.cg_color)  # cg for this eval
                 else:
@@ -735,33 +760,38 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
                 ax[i][j].axvline(sig, label='Sig', ls='dashed', color='black', alpha=0.5)
 
                 ax[i][j].set_xlim(0, 1.5)
-                ax[i][j].set_title(
-                    bead_type_1 + ' ' + bead_type_2 + ' - RDF Δ ' + str(round(cg_iter_itp['rdfs_short'][pair_type], 2)))
+                if bottom_up_active:
+                    ax[i][j].set_title(f"{bead_type_1} {bead_type_2} - RDF Δ {round(cg_iter_itp['rdfs_short'][pair_type], 2)}")
+                else:
+                    ax[i][j].set_title(f"{bead_type_1} {bead_type_2} - RDF Δ Inactive")
                 ax[i][j].grid()
                 ax[i][j].legend()
             else:
                 ax[i][j].set_visible(False)
 
-    plt.suptitle(lipid_code + ' ' + temp + ' -- Geoms: ' + str(round(delta_geoms, 2)) + ' -- RDF: ' + str(
-        round(delta_rdfs, 2)) + ' -- APL: ' + str(round(cg_iter_itp['apl']['avg'], 2)) + ' -- Dhh: ' + str(
-        round(cg_iter_itp['Dhh']['avg'], 2)))
+    if bottom_up_active:
+        plt.suptitle(f"{lipid_code} {temp} -- Geoms: {round(delta_geoms, 2)} -- RDF: {round(delta_rdfs, 2)} -- APL: {round(cg_iter_itp['apl']['avg'], 2)} -- Dhh: {round(cg_iter_itp['Dhh']['avg'], 2)}")
+    else:
+        plt.suptitle(
+            f"{lipid_code} {temp} -- Geoms: Inactive -- RDF: Inactive -- APL: {round(cg_iter_itp['apl']['avg'], 2)} -- Dhh: {round(cg_iter_itp['Dhh']['avg'], 2)}")
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig('RDF_SHELL_NORM_' + lipid_code + '_' + temp + '_cutoff_1.5_nm.png')
     plt.close(fig)
 
-    # average error by geom_grp -- how it is stored is a bit stupid but works OK
-    for geom_grp in ns.all_constraints_types:
-        if lipid_code in ns.all_constraints_types[geom_grp]:
-            error_data['constraints'][geom_grp] /= geom_grps_counter[geom_grp]  # happens once per geom_grp, as we want
-    for geom_grp in ns.all_bonds_types:
-        if lipid_code in ns.all_bonds_types[geom_grp]:
-            error_data['bonds'][geom_grp] /= geom_grps_counter[geom_grp]  # happens once per geom_grp, as we want
-    for geom_grp in ns.all_angles_types:
-        if lipid_code in ns.all_angles_types[geom_grp]:
-            error_data['angles'][geom_grp] /= geom_grps_counter[geom_grp]
+    if bottom_up_active:
+        # average error by geom_grp -- how it is stored is a bit stupid but works OK
+        for geom_grp in ns.all_constraints_types:
+            if lipid_code in ns.all_constraints_types[geom_grp]:
+                error_data['constraints'][geom_grp] /= geom_grps_counter[geom_grp]  # happens once per geom_grp, as we want
+        for geom_grp in ns.all_bonds_types:
+            if lipid_code in ns.all_bonds_types[geom_grp]:
+                error_data['bonds'][geom_grp] /= geom_grps_counter[geom_grp]  # happens once per geom_grp, as we want
+        for geom_grp in ns.all_angles_types:
+            if lipid_code in ns.all_angles_types[geom_grp]:
+                error_data['angles'][geom_grp] /= geom_grps_counter[geom_grp]
 
-    for bead_type in error_data['rdf_bead']:
-        error_data['rdf_bead'][bead_type] /= beads_types_counter[
-            bead_type]  # averaged error quantification for later bead radius variations
+        # averaged error quantification for later bead radius variations
+        for bead_type in error_data['rdf_bead']:
+            error_data['rdf_bead'][bead_type] /= beads_types_counter[bead_type]
 
     return delta_geoms, delta_geoms_per_grp, raw_delta_geoms, cg_iter_itp['apl'], cg_iter_itp['Dhh'], delta_rdfs, delta_rdfs_per_grp, error_data, area_compress, geoms_time, rdfs_time

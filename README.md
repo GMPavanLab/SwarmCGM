@@ -1,4 +1,4 @@
-# SwarmCGᴍ
+# SwarmCG (modifed version for CG lipids FF)
 
 ### Contents
 
@@ -13,14 +13,14 @@
 
 # Overview
 
-Automatic data-driven approaches are increasingly used to develop accurate molecular models. But the parameters of such automatically-optimised models are typically untransferable. Using a multi-reference approach in combination with an automatic optimisation engine (SwarmCGᴍ), here we show that it is possible to optimise coarse-grained (CG) lipid models that are also transferable, generating optimised lipid force fields.
+Automatic data-driven approaches are increasingly used to develop accurate molecular models. But the parameters of such automatically-optimised models are typically untransferable. Using a multi-reference approach in combination with an automatic optimisation engine (SwarmCG), here we show that it is possible to optimise coarse-grained (CG) lipid models that are also transferable, generating optimised lipid force fields.
 
-The parameters of the CG lipid models are iteratively and simultaneously optimised against higher-resolution simulations (bottom-up) and experimental data (top-down references). Including different types of lipid bilayers in the training set guarantees the transferability of the optimised force field parameters. Tested against state-of-the-art CG lipid force fields, we demonstrate that SwarmCGᴍ can systematically improve their parameters, enhancing the agreement with the experiments even for lipid types not included in the training set. The approach is general and can be used to improve existing CG lipid force fields, as well as to develop new custom ones.
+The parameters of the CG lipid models are iteratively and simultaneously optimised against higher-resolution simulations (bottom-up) and experimental data (top-down references). Including different types of lipid bilayers in the training set guarantees the transferability of the optimised force field parameters. Tested against state-of-the-art CG lipid force fields, we demonstrate that SwarmCG can systematically improve their parameters, enhancing the agreement with the experiments even for lipid types not included in the training set. The approach is general and can be used to improve existing CG lipid force fields, as well as to develop new custom ones.
 
 # System Requirements
 
 The code provided herein is designed for running on High Performance Computing (HPC) resources, but can just as well be executed on a classic desktop computer for testing purposes, or even for obtaining optimized CG lipid models given enough execution time.
-Due to the embarrassingly parallel nature of the tasks performed by SwarmCGᴍ, best performances are achieved on HPC resources, in terms of required wall-clock time for obtaining well-optimized CG models.
+Due to the embarrassingly parallel nature of the tasks performed by SwarmCG, best performances are achieved on HPC resources, in terms of required wall-clock time for obtaining well-optimized CG models.
 
 The execution wall-clock times are directly dependent on:
 - the number of different lipids included in the training set
@@ -50,7 +50,7 @@ For decent performance, it is recommended to use:
 
 ### HPC usage
 
-For optimal performance, SwarmCGᴍ can be executed on HPC resources.
+For optimal performance, SwarmCG can be executed on HPC resources.
 This enables calibrating accurate CG lipid FFs via the usage of many different lipids in the training set, which allows to fully take advantage of the transferability constraint imposed to the parameters of the FF (*i.e.* the FF parameters are tested at each iteration via multiple CG simulations of lipid bilayers). 
 
 Supported HPC resource managers:
@@ -100,8 +100,8 @@ However, this will not result in realistically optimal lipid models, due to:
 which are necessary limits to be introduced here for quick (laptop/desktop) demonstration purposes.
 These values can be even further decreased for the purpose of testing the consistency of your own input configuration files for a specific optimization run.
 
-As the input of SwarmCGᴍ requires a preliminary CG mapping choice (*i.e.* defining the positions and types of the CG beads, bonds and angles used for building the molecular models which parameters will be optimized), several parameters allow to define precisely which parameters should be optimized, or which other ones stay at given fixed values, according to your requirements.
-To this end, SwarmCGᴍ makes use of [YAML](https://yaml.org/) config files to simplify this process and help keeping track of the hyper-parameters used for an optimization run. 
+As the input of SwarmCG requires a preliminary CG mapping choice (*i.e.* defining the positions and types of the CG beads, bonds and angles used for building the molecular models which parameters will be optimized), several parameters allow to define precisely which parameters should be optimized, or which other ones stay at given fixed values, according to your requirements.
+To this end, SwarmCG makes use of [YAML](https://yaml.org/) config files to simplify this process and help keeping track of the hyper-parameters used for an optimization run. 
 
 Please refer to [the manual](https://github.com/GMPavanLab/SwarmCGM/tree/main/Manual.pdf) for a breakdown of each parameter and step-by-step guidance on how to parametrize an optimization procedure.
 Additional example config files are provided below and can also be related to the content and explanations provided in the paper.
@@ -137,4 +137,4 @@ python3 optimize_lipids.py -cfg example3.yaml
 
 # Citation
 
-The preprint for SwarmCGᴍ can be found [on ArXiv](arxiv.org/abs/2107.01012).
+The preprint for SwarmCG can be found [on ArXiv](arxiv.org/abs/2107.01012).

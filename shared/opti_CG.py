@@ -139,10 +139,12 @@ def load_aa_data(ns):
 # read coarse-grain ITP
 def read_cg_itp_file_grp_comments(ns, itp_lines):
 
+	# TODO: the multiplication of the number of bonds etc must be done out of this function and separately for each trajectory used as reference
+
 	print('  Reading CG ITP file')
 	ns.cg_itp = {'moleculetype': {'molname': '', 'nrexcl': 0}, 'atoms': [], 'constraint': [], 'bond': [], 'angle': [], 'dihedral': [], 'exclusion': []}
 	ns.nb_constraints, ns.nb_bonds, ns.nb_angles, ns.nb_dihedrals = -1, -1, -1, -1
-	ns.nb_beads_itp = -1
+	ns.nb_beads_itp = -1  # will be initialized while reading the [atoms] block of the ITP
 
 	# for the input of RDF calculations, while allowing nrexcl = 1
 	ns.cg_itp['beads_ids_per_beads_types_sing'] = {}
@@ -197,10 +199,10 @@ def read_cg_itp_file_grp_comments(ns, itp_lines):
 					ns.cg_itp['constraint'].append({}) # initialize storage for this new group
 				
 					try:
-						ns.cg_itp['constraint'][ns.nb_constraints]['beads'] = [[int(bead_id)-1 for bead_id in sp_itp_line[0:2]]] # retrieve indexing from 0 for CG beads IDS for MDAnalysis
+						ns.cg_itp['constraint'][ns.nb_constraints]['beads'] = [[int(bead_id)-1 for bead_id in sp_itp_line[0:2]]]  # retrieve indexing from 0 for CG beads IDS for MDAnalysis
 						# take into account multiple instances of the same molecule in trajectory
 						for j in range(1, ns.nb_mol_instances):
-							ns.cg_itp['constraint'][ns.nb_constraints]['beads'].append([j*ns.nb_beads_initial+int(bead_id)-1 for bead_id in sp_itp_line[0:2]])
+							ns.cg_itp['constraint'][ns.nb_constraints]['beads'].append([j*ns.nb_beads_itp+int(bead_id)-1 for bead_id in sp_itp_line[0:2]])
 					except ValueError:
 						sys.exit(config.header_error+'Incorrect reading of the CG ITP file within [constraints] section, please check this file')
 
@@ -224,13 +226,13 @@ def read_cg_itp_file_grp_comments(ns, itp_lines):
 				elif r_bonds:
 
 					ns.nb_bonds += 1
-					ns.cg_itp['bond'].append({}) # initialize storage for this new group
+					ns.cg_itp['bond'].append({})  # initialize storage for this new group
 				
 					try:
 						ns.cg_itp['bond'][ns.nb_bonds]['beads'] = [[int(bead_id)-1 for bead_id in sp_itp_line[0:2]]] # retrieve indexing from 0 for CG beads IDS for MDAnalysis
 						# take into account multiple instances of the same molecule in trajectory
 						for j in range(1, ns.nb_mol_instances):
-							ns.cg_itp['bond'][ns.nb_bonds]['beads'].append([j*ns.nb_beads_initial+int(bead_id)-1 for bead_id in sp_itp_line[0:2]])
+							ns.cg_itp['bond'][ns.nb_bonds]['beads'].append([j*ns.nb_beads_itp+int(bead_id)-1 for bead_id in sp_itp_line[0:2]])
 					except ValueError:
 						sys.exit(config.header_error+'Incorrect reading of the CG ITP file within [bonds] section, please check this file')
 
@@ -255,13 +257,13 @@ def read_cg_itp_file_grp_comments(ns, itp_lines):
 				elif r_angles:
 
 					ns.nb_angles += 1
-					ns.cg_itp['angle'].append({}) # initialize storage for this new group
+					ns.cg_itp['angle'].append({})  # initialize storage for this new group
 				
 					try:
 						ns.cg_itp['angle'][ns.nb_angles]['beads'] = [[int(bead_id)-1 for bead_id in sp_itp_line[0:3]]] # retrieve indexing from 0 for CG beads IDS for MDAnalysis
 						# take into account multiple instances of the same molecule in trajectory
 						for j in range(1, ns.nb_mol_instances):
-							ns.cg_itp['angle'][ns.nb_angles]['beads'].append([j*ns.nb_beads_initial+int(bead_id)-1 for bead_id in sp_itp_line[0:3]])
+							ns.cg_itp['angle'][ns.nb_angles]['beads'].append([j*ns.nb_beads_itp+int(bead_id)-1 for bead_id in sp_itp_line[0:3]])
 					except ValueError:
 						sys.exit(config.header_error+'Incorrect reading of the CG ITP file within [angles] section, please check this file')
 
@@ -283,20 +285,20 @@ def read_cg_itp_file_grp_comments(ns, itp_lines):
 						ns.cg_itp['dihedral'][ns.nb_dihedrals]['beads'] = [[int(bead_id)-1 for bead_id in sp_itp_line[0:4]]] # retrieve indexing from 0 for CG beads IDS for MDAnalysis
 						# take into account multiple instances of the same molecule in trajectory
 						for j in range(1, ns.nb_mol_instances):
-							ns.cg_itp['dihedral'][ns.nb_dihedrals]['beads'].append([j*ns.nb_beads_initial+int(bead_id)-1 for bead_id in sp_itp_line[0:4]])
+							ns.cg_itp['dihedral'][ns.nb_dihedrals]['beads'].append([j*ns.nb_beads_itp+int(bead_id)-1 for bead_id in sp_itp_line[0:4]])
 					except ValueError:
 						sys.exit(config.header_error+'Incorrect reading of the CG ITP file within [dihedrals] section, please check this file')
 
 					func = int(sp_itp_line[4])
 					ns.cg_itp['dihedral'][ns.nb_dihedrals]['funct'] = func
-					ns.cg_itp['dihedral'][ns.nb_dihedrals]['value'] = float(sp_itp_line[5]) # issue happens here for functions that are not handled
+					ns.cg_itp['dihedral'][ns.nb_dihedrals]['value'] = float(sp_itp_line[5])  # issue happens here for functions that are not handled
 					ns.cg_itp['dihedral'][ns.nb_dihedrals]['fct'] = float(sp_itp_line[6])
 
 					# handle multiplicity if function assumes multiplicity
 					if func in config.dihedral_func_with_mult:
 						try:
 							ns.cg_itp['dihedral'][ns.nb_dihedrals]['mult'] = int(sp_itp_line[7])
-						except (IndexError, ValueError): # incorrect read of multiplicity -- or it was expected but not provided
+						except (IndexError, ValueError):  # incorrect read of multiplicity -- or it was expected but not provided
 							sys.exit('  Cannot read multiplicity for dihedral at ITP line '+str(i+1))
 
 						try:
@@ -304,7 +306,7 @@ def read_cg_itp_file_grp_comments(ns, itp_lines):
 						except IndexError:
 							sys.exit('Cannot find geom group in ITP for dihedral nb '+str(ns.nb_dihedrals+1))
 
-					else: # no multiplicity parameter is expected
+					else:  # no multiplicity parameter is expected
 						ns.cg_itp['dihedral'][ns.nb_dihedrals]['mult'] = ''
 
 						try:
@@ -329,16 +331,16 @@ def read_cg_itp_file_grp_comments(ns, itp_lines):
 
 
 # load CG beads from NDX-like file
-def read_ndx_atoms2beads(ns):
+def read_ndx_atoms2beads(ns, cg_map_filename):
 
-	with open(ns.cg_map_filename, 'r') as fp:
+	with open(cg_map_filename, 'r') as fp:
 
 		ndx_lines = fp.read().split('\n')
-		ndx_lines = [ndx_line.strip().split(';')[0] for ndx_line in ndx_lines] # split for comments
+		ndx_lines = [ndx_line.strip().split(';')[0] for ndx_line in ndx_lines]  # split for comments
 
 		ns.atoms_occ_total = collections.Counter()
-		ns.all_beads = dict() # atoms id mapped to each bead -- for all residues
-		ns.simple_beads = dict() # atoms id mapped to each bead -- for a single residue
+		ns.all_beads = dict()  # atoms id mapped to each bead -- for all residues
+		ns.simple_beads = dict()  # atoms id mapped to each bead -- for a single residue
 		bead_id = 0
 
 		for ndx_line in ndx_lines:
@@ -347,38 +349,36 @@ def read_ndx_atoms2beads(ns):
 				if bool(re.search('\[.*\]', ndx_line)):
 					ns.all_beads[bead_id] = {'atoms_id': []}
 					ns.simple_beads[bead_id] = []
-					lines_read = 0 # error handling, ensure only 1 line is read for each NDX file section/bead
+					lines_read = 0  # error handling, ensure only 1 line is read for each NDX file section/bead
 
 				else:
 					try:
 						lines_read += 1
 						if lines_read > 1:
 							sys.exit(config.header_error+'Some sections of the CG beads mapping file have multiple lines, please correct the mapping')
-						bead_atoms_id = [int(atom_id)-1 for atom_id in ndx_line.split()] # retrieve indexing from 0 for atoms IDs for MDAnalysis
-						ns.all_beads[bead_id]['atoms_id'].extend(bead_atoms_id) # all atoms included in current bead
+						bead_atoms_id = [int(atom_id)-1 for atom_id in ndx_line.split()]  # retrieve indexing from 0 for atoms IDs for MDAnalysis
+						ns.all_beads[bead_id]['atoms_id'].extend(bead_atoms_id)  # all atoms included in current bead
 						ns.simple_beads[bead_id].extend(bead_atoms_id)
 
-						for atom_id in bead_atoms_id: # bead to which each atom belongs (one atom can belong to multiple beads if there is split-mapping)
+						for atom_id in bead_atoms_id:  # bead to which each atom belongs (one atom can belong to multiple beads if there is split-mapping)
 							ns.atoms_occ_total[atom_id] += 1
 						bead_id += 1
 
 					except NameError:
 						sys.exit(config.header_error+'The CG beads mapping file does NOT seem to contain CG beads sections, please verify the input mapping')
-					except ValueError: # non-integer atom ID provided
+					except ValueError:  # non-integer atom ID provided
 						sys.exit(config.header_error+'Incorrect reading of the sections\' content in the CG beads mapping file, please verify the input mapping')
 
 		# take into account multiple instances of the same molecule in trajectory
-		# WARNING: we assume it's all the same molecules
-		ns.nb_beads_initial = len(ns.all_beads.keys())
-
+		# NOTE: we assume it's all the same molecules
 		for i in range(1, ns.nb_mol_instances):
 
-			for bead_id_initial in range(ns.nb_beads_initial):
+			for bead_id_initial in range(ns.nb_beads_itp):
 				new_bead_atoms_id = [i*ns.nb_mol_atoms+atom_id for atom_id in ns.all_beads[bead_id_initial]['atoms_id']]
 				ns.all_beads[bead_id] = {'atoms_id': new_bead_atoms_id}
 				# print('bead id:', bead_id, '-- atoms ids:', ns.all_beads[bead_id]['atoms_id'])
 
-				for atom_id in new_bead_atoms_id: # bead to which each atom belongs (one atom can belong to multiple beads if there is split-mapping)
+				for atom_id in new_bead_atoms_id:  # bead to which each atom belongs (one atom can belong to multiple beads if there is split-mapping)
 					ns.atoms_occ_total[atom_id] += 1
 				bead_id += 1
 
@@ -588,12 +588,12 @@ def get_initial_guess_list(ns):
 		param_short = param.split('_')[0]
 
 		if param.startswith('B') and param.endswith('val'):
-			input_guess.append(ns.params_val[param_short]['avg'])
+			input_guess.append(ns.params_val[param_short]['ref'])
 		elif param.startswith('B') and param.endswith('fct'):
 			input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
 
 		elif param.startswith('A') and param.endswith('val'):
-			input_guess.append(ns.params_val[param_short]['avg'])
+			input_guess.append(ns.params_val[param_short]['ref'])
 		elif param.startswith('A') and param.endswith('fct'):
 			input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
 
@@ -622,8 +622,8 @@ def get_initial_guess_list(ns):
 
 			# bonds, tune both value and force constants
 			if param.startswith('B') and param.endswith('val'):
-				draw_low = max(ns.params_val[param_short]['avg'] - ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][0])
-				draw_high = min(ns.params_val[param_short]['avg'] + ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				draw_low = max(ns.params_val[param_short]['ref'] - ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][0])
+				draw_high = min(ns.params_val[param_short]['ref'] + ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][1])
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 			elif param.startswith('B') and param.endswith('fct'):
 				draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['bond_fct_guess_variation'], ns.user_config['min_fct_bonds'])
@@ -631,8 +631,8 @@ def get_initial_guess_list(ns):
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 
 			elif param.startswith('A') and param.endswith('val'):
-				draw_low = max(ns.params_val[param_short]['avg'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][0])
-				draw_high = min(ns.params_val[param_short]['avg'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				draw_low = max(ns.params_val[param_short]['ref'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][0])
+				draw_high = min(ns.params_val[param_short]['ref'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][1])
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 			elif param.startswith('A') and param.endswith('fct'):
 				draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['angle_fct_guess_variation'], ns.user_config['min_fct_angles'])

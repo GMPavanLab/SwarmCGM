@@ -73,8 +73,6 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
 
     if sim_status == 'success':
         print()
-        print('  Δ Geoms:', round(score_part['perc_delta_geoms'], 4),
-              '(' + str(round(score_part['perc_delta_geoms'], 2)) + '%)')
 
         with open('../../' + ns.opti_moves_details_lipid_temp_file, 'a') as fp:
 
@@ -82,7 +80,6 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
                 str_delta_apl = str(round(score_part['delta_apl'], 4))
                 str_perc_delta_apl_real = str(round(score_part['perc_delta_apl_real'], 4))
                 str_perc_delta_apl_adapt = str(round(score_part['perc_delta_apl_adapt'], 4))
-
                 print('  Δ APL:', round(score_part['delta_apl'], 4),
                       '(' + str(round(score_part['perc_delta_apl_real'], 2)) + '%)', '              (APL avg:',
                       round(score_part['cg_apl']['avg'], 3), '+/-',
@@ -93,7 +90,6 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
                 str_delta_apl = 'None'
                 str_perc_delta_apl_real = 'None'
                 str_perc_delta_apl_adapt = 'None'
-
                 print('  CG APL:', round(score_part['cg_apl']['avg'], 4), '(no exp val)', '              (APL avg:',
                       round(score_part['cg_apl']['avg'], 3),
                       '+/-', str(round(score_part['cg_apl']['std'], 3)) + ')')
@@ -102,7 +98,6 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
                 str_delta_thick = str(round(score_part['delta_thick'], 4))
                 str_perc_delta_thick_real = str(round(score_part['perc_delta_thick_real'], 4))
                 str_perc_delta_thick_adapt = str(round(score_part['perc_delta_thick_adapt'], 4))
-
                 print('  Δ Thick Dhh:', round(score_part['delta_thick'], 4),
                       '(' + str(round(score_part['perc_delta_thick_real'], 2)) + '%)',
                       '       (Dhh avg:', round(score_part['cg_thick']['avg'], 3), '+/-',
@@ -118,11 +113,14 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
                       round(score_part['cg_thick']['avg'], 3),
                       '+/-', str(round(score_part['cg_thick']['std'], 3)) + ')')
 
-            print('  Δ RDFs:', round(score_part['perc_delta_rdfs'], 4),
-                  '(' + str(round(score_part['perc_delta_rdfs'], 2)) + '%)')
-            print()
-            print('  Area compressibility:', round(score_part['area_compress'], 1), 'mN/m     (NOT in the score atm)')
-            print()
+            # if user has specified that we make use of the simulations available for this lipid for bottom-up scoring
+            if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+                print(f"  Δ Geoms: {round(score_part['perc_delta_geoms'], 4)} ({round(score_part['perc_delta_geoms'], 2)} %)")
+                print(f"  Δ RDFs: {round(score_part['perc_delta_rdfs'], 4)} ({round(score_part['perc_delta_rdfs'], 2)} %)")
+            else:
+                print(f"  Δ Geoms: Inactive")
+                print(f"  Δ RDFs: Inactive")
+            print(f"\n  Area compressibility: {round(score_part['area_compress'], 1)} mN/m     (NOT in the score atm)\n")
 
             fp.write(str(ns.n_cycle) + ' ' + str(ns.n_swarm_iter) + ' ' + str(nb_eval_particle) + ' ' + lipid_code + ' ' + temp + ' ' + str(
                 round(score_part['cg_apl']['avg'], 4)) + ' ' + str(

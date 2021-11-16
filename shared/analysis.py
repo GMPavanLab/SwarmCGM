@@ -48,35 +48,37 @@ def get_score_and_plot_graphs_for_single_job(ns, nb_eval_particle, lipid_code, t
                       'delta_rdfs_per_grp': delta_rdfs_per_grp}
 
         # try to locate error for later directed swarm initialization
-        nb_beads_types = len(ns.lipid_beads_types[lipid_code])
-        err_mat_eps = np.zeros((nb_beads_types, nb_beads_types), dtype=np.float)
+        # if user has specified that we make use of the simulations available for this lipid for bottom-up scoring
+        if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+            nb_beads_types = len(ns.lipid_beads_types[lipid_code])
+            err_mat_eps = np.zeros((nb_beads_types, nb_beads_types), dtype=np.float)
 
-        for i in range(nb_beads_types):  # error matrix of eps
-            for j in range(nb_beads_types):
-                if j >= i:
-                    bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], ns.lipid_beads_types[lipid_code][j]
-                    pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
-                    err_mat_eps[i, j] = error_data['rdf_pair'][pair_type]
-                else:
-                    err_mat_eps[i, j] = None
+            for i in range(nb_beads_types):  # error matrix of eps
+                for j in range(nb_beads_types):
+                    if j >= i:
+                        bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], ns.lipid_beads_types[lipid_code][j]
+                        pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
+                        err_mat_eps[i, j] = error_data['rdf_pair'][pair_type]
+                    else:
+                        err_mat_eps[i, j] = None
 
-        # plot error mat for eps
-        fig, ax = plt.subplots()
-        cmap = CM.get_cmap('OrRd')
-        cmap.set_bad('lavender')
-        im = ax.imshow(err_mat_eps, cmap=cmap, vmin=0, vmax=25, aspect='equal')
-        ax.set_xticks(np.arange(nb_beads_types))
-        ax.set_yticks(np.arange(nb_beads_types))
-        ax.set_xticklabels(ns.lipid_beads_types[lipid_code])
-        ax.set_yticklabels(ns.lipid_beads_types[lipid_code])
-        ax.xaxis.tick_top()
-        cbar = ax.figure.colorbar(im, ax=ax)
-        cbar.ax.set_ylabel('Error', rotation=-90, va="bottom")
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
-        plt.suptitle(lipid_code + ' ' + temp + ' -- Error quantif. for EPS')
-        # plt.show()
-        plt.savefig('EPS_ERROR_' + lipid_code + '_' + temp + '.png')
-        plt.close(fig)
+            # plot error mat for eps
+            fig, ax = plt.subplots()
+            cmap = CM.get_cmap('OrRd')
+            cmap.set_bad('lavender')
+            im = ax.imshow(err_mat_eps, cmap=cmap, vmin=0, vmax=25, aspect='equal')
+            ax.set_xticks(np.arange(nb_beads_types))
+            ax.set_yticks(np.arange(nb_beads_types))
+            ax.set_xticklabels(ns.lipid_beads_types[lipid_code])
+            ax.set_yticklabels(ns.lipid_beads_types[lipid_code])
+            ax.xaxis.tick_top()
+            cbar = ax.figure.colorbar(im, ax=ax)
+            cbar.ax.set_ylabel('Error', rotation=-90, va="bottom")
+            fig.tight_layout(rect=[0, 0, 1, 0.95])
+            plt.suptitle(lipid_code + ' ' + temp + ' -- Error quantif. for EPS')
+            # plt.show()
+            plt.savefig('EPS_ERROR_' + lipid_code + '_' + temp + '.png')
+            plt.close(fig)
 
     else:  # simulation did NOT finish properly, attribute the pre-defined worst score
 

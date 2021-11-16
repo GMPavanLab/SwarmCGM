@@ -334,6 +334,7 @@ for lipid_code in ns.user_config['lipids_codes']:
         sys.exit(
             f"{config.header_error}Cannot find CG model ITP file for {lipid_code} for mapping {ns.user_config['mapping_type']} with solvent {ns.user_config['solv']}")
 
+
 #############################################
 # BIG DATA LOADING LOOP HERE                #
 # CHECK IF ANYTHING IS MISSING FROM PICKLES #
@@ -345,319 +346,318 @@ for lipid_code in ns.user_config['lipids_codes']:
 ns.cg_itps = {}
 create_bins_and_dist_matrices(ns)  # bins for EMD calculations
 
-ns.rdf_indep_weights = {}  # attempt to weight the independant RDF in the scoring that will come later
+ns.rdf_indep_weights = {}  # attempt to weight the independent RDF in the scoring that will come later
 ns.all_delta_ts_swarm_iter = []  # keep track of average SWARM iteration time
 
 # find which data have to be read or pickled
 for lipid_code in ns.user_config['lipids_codes']:
 
-    print()
-    print(config.sep)
-    print()
-    print('Processing', lipid_code, 'mapping', ns.user_config['mapping_type'], '...')
-
-    ns.cg_itp_filename = f"{config.cg_models_data_dir}/CG_{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}.itp"
-    ns.cg_map_filename = f"{config.cg_models_data_dir}/MAP_{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}.ndx"
+    cg_map_filename = f"{config.cg_models_data_dir}/MAP_{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}.ndx"
+    print(f"\n{config.sep}")
+    print(f"\nProcessing {lipid_code} mapping {ns.user_config['mapping_type']} ...")
     pickle_file = f"{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['map_center']}_{ns.user_config['solv']}.pickle"
     ns.rdf_indep_weights[lipid_code] = {}
 
     if ns.user_config['reset'] or not os.path.isfile(f"{config.data_aa_storage_dir}/{pickle_file}"):
+
+        # TODO: these are data that cannot be read from AA because there is not AA available in this case
+        # TODO: so they have to be provided via the config file AND/OR this whole block could be better written
+        ns.nb_mol_instances = 128
+
+        # this is based on lipid type and common for different temperatures, ASSUMING INDEXING IS IDENTICAL ACROSS TEMPERATURES
+        # therefore execute only for first temperature encountered for lipid
+
+        # read starting CG ITP file
+        cg_itp_filename = f"{config.cg_models_data_dir}/CG_{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}.itp"
+        with open(cg_itp_filename, 'r') as fp:
+            itp_lines = fp.read().split('\n')
+            itp_lines = [itp_line.strip() for itp_line in itp_lines]
+            print()
+            read_cg_itp_file_grp_comments(ns, itp_lines)  # loads ITP object that contains our reference atomistic data -- won't ever be modified during execution
+
+        # ns.nb_mol_atoms = len(aa_universe.residues[0].atoms)
+        # print('    Found', ns.nb_mol_instances, 'instances of', lipid_code)
+        # print('    Found', ns.nb_mol_atoms, 'atoms for', lipid_code)
+        # print()
+        print('    Found', ns.nb_beads_itp, 'CG particles')
+
+        # Storage at the PER LIPID LEVEL -- Create only once per lipid in this code block
+        ns.cg_itp['rdf'] = {}  # for RDFs
+        all_avg_Dhh_delta = []  # for Dhh AA-CG delta of phosphate positions
+
+        # first index beads ids on beads types
+        ns.cg_itp['beads_ids_per_beads_types_mult'] = {}
+
+        for bead_id_mult in range(ns.nb_mol_instances * ns.nb_beads_itp):
+
+            bead_id_sing = bead_id_mult % ns.nb_beads_itp
+            bead_type = ns.cg_itp['atoms'][bead_id_sing]['bead_type']
+
+            if bead_type in ns.cg_itp['beads_ids_per_beads_types_mult']:
+                ns.cg_itp['beads_ids_per_beads_types_mult'][bead_type].append(bead_id_mult)
+            else:
+                ns.cg_itp['beads_ids_per_beads_types_mult'][bead_type] = [bead_id_mult]
+
+        # next we prepare the vector of beads for InterRDF
+        ns.cg_itp['rdf_pairs'] = {}  # key: beadtype1_beadtype2 sorted alphabetical
+        for bead_type_1 in ns.cg_itp['beads_ids_per_beads_types_mult']:
+            for bead_type_2 in ns.cg_itp['beads_ids_per_beads_types_mult']:
+                sorted_beads_types = sorted([bead_type_1, bead_type_2])  # conserve the ordering
+                pair_type = '_'.join(sorted_beads_types)
+                ns.cg_itp['rdf_pairs'][pair_type] = [
+                    ns.cg_itp['beads_ids_per_beads_types_mult'][sorted_beads_types[0]],
+                    ns.cg_itp['beads_ids_per_beads_types_mult'][sorted_beads_types[1]]]
+
         for temp in ns.user_config['lipids_codes'][lipid_code]:
 
             ns.rdf_indep_weights[lipid_code][temp] = {}
 
-            # read atomistic trajectory
-            print()
-            print('  Reading AA trajectory for', lipid_code, temp, 'with mapping', ns.user_config['mapping_type'], 'and solvent',
-                  ns.user_config['solv'], flush=True)
-            aa_tpr_filepath = f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.tpr"
-            aa_traj_filepath = f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.xtc"
-            aa_universe = mda.Universe(aa_tpr_filepath, aa_traj_filepath, in_memory=True, refresh_offsets=True,
-                                          guess_bonds=False)  # setting guess_bonds=False disables angles, dihedrals and improper_dihedrals guessing, which is activated by default
-            print('    Found', len(aa_universe.trajectory), 'frames in AA trajectory file', flush=True)
+            # if user has specified that we make use of the simulations available for this lipid for bottom-up scoring
+            if ns.user_config['reference_AA_weight'][lipid_code] > 0:
 
-            # TODO: not useful atm, according to the AA trajs we use, but making the AA trajs whole
-            #       should be re-enabled by default
-            # load_aa_data(ns)
-            # make_aa_traj_whole_for_selected_mols(ns)
+                # read atomistic trajectory
+                print('\n  Reading AA trajectory for', lipid_code, temp, 'with mapping', ns.user_config['mapping_type'], 'and solvent',
+                      ns.user_config['solv'], flush=True)
+                aa_tpr_filepath = f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.tpr"
+                aa_traj_filepath = f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.xtc"
+                aa_universe = mda.Universe(aa_tpr_filepath, aa_traj_filepath, in_memory=True, refresh_offsets=True,
+                                              guess_bonds=False)  # setting guess_bonds=False disables angles, dihedrals and improper_dihedrals guessing, which is activated by default
+                print('    Found', len(aa_universe.trajectory), 'frames in AA trajectory file', flush=True)
 
-            # this is based on lipid type and common for different temperatures, ASSUMING INDEXING IS IDENTICAL ACROSS TEMPERATURES
-            # therefore execute only for first temperature encountered for lipid
-            if temp == ns.user_config['lipids_codes'][lipid_code][0]:
+                # TODO: not useful atm, according to the AA trajs we use, but making the AA trajs whole
+                #       should be re-enabled by default
+                # load_aa_data(ns)
+                # make_aa_traj_whole_for_selected_mols(ns)
 
-                ns.nb_mol_instances = len(aa_universe.residues)
+                # this is based on lipid type and common for different temperatures, ASSUMING INDEXING IS IDENTICAL ACROSS TEMPERATURES
+                # therefore execute only for first temperature encountered for lipid
+                # if temp == ns.user_config['lipids_codes'][lipid_code][0]:
+
+                nb_mol_instances = len(aa_universe.residues)
                 ns.nb_mol_atoms = len(aa_universe.residues[0].atoms)
-                print('    Found', ns.nb_mol_instances, 'instances of', lipid_code)
+                print('    Found', nb_mol_instances, 'instances of', lipid_code)
                 print('    Found', ns.nb_mol_atoms, 'atoms for', lipid_code)
                 print()
                 print('  Reading mapping file')
-                read_ndx_atoms2beads(ns)  # read mapping, get atoms accurences in beads
+                cg_map_filename = f"{config.cg_models_data_dir}/MAP_{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}.ndx"
+                read_ndx_atoms2beads(ns, cg_map_filename)  # read mapping, get atoms accurences in beads
                 get_atoms_weights_in_beads(ns)  # get weights of atoms within beads
-                print('    Found', ns.nb_beads_initial, 'CG particles')
 
-                # read starting CG ITP file
-                with open(ns.cg_itp_filename, 'r') as fp:
-                    itp_lines = fp.read().split('\n')
-                    itp_lines = [itp_line.strip() for itp_line in itp_lines]
-                    print()
-                    read_cg_itp_file_grp_comments(ns,
-                                                  itp_lines)  # loads ITP object that contains our reference atomistic data -- won't ever be modified during execution
+                # storage of AA data: APL and Dhh for each temperature
+                ns.cg_itp['exp_data_' + temp] = {}
 
-                # check that number of beads is appropriate between CG model ITP and mapping
-                if ns.nb_beads_initial != ns.nb_beads_itp:  # obtained from the mapping file and itp
-                    sys.exit(
-                        '\nNumer of beads is inconsistent between CG ITP model and NDX mapping for lipid ' + lipid_code)
+                # it seems MDA AtomGroups are copies, then it's necessary to re-create the atom groups for each new reference trajectory
+                mda_beads_atom_grps, mda_weights_atom_grps = get_beads_MDA_atomgroups(ns, aa_universe)  # for each CG bead, create atom groups for mapped geoms calculation using COM or COG
 
-                # Storage at the PER LIPID LEVEL -- Create only once per lipid in this code block
-                ns.cg_itp['rdf'] = {}  # for RDFs
-                all_avg_Dhh_delta = []  # for Dhh AA-CG delta of phosphate positions
+                print('\n  Mapping the trajectory from AA to CG representation')
+                aa2cg_universe = initialize_cg_traj(ns)
+                aa2cg_universe = map_aa2cg_traj(ns, aa_universe, aa2cg_universe, mda_beads_atom_grps, mda_weights_atom_grps)
 
-                # first index beads ids on beads types
-                ns.cg_itp['beads_ids_per_beads_types_mult'] = {}
+                # calculate Dhh delta for thickness calculations
+                # NOTE: it works because trajectories are WHOLE for each molecule
+                print('\n  Calculating Dhh delta of phosphate position between AA-CG')
+                # NOTE: when we start incorporating lipids for which the code is not 4 letters this will NOT work
+                head_type = lipid_code[2:]
+                phosphate_atom_id = ns.user_config['phosphate_pos'][head_type]['AA']
+                phosphate_bead_id = ns.user_config['phosphate_pos'][head_type]['CG']
+                phosphate_bead_id -= 1  # retrieve 0-indexing
+                phosphate_atom_id -= 1
+                all_Dhh_deltas = np.empty(len(aa_universe.trajectory) * ns.nb_mol_instances, dtype=np.float32)
 
-                for bead_id_mult in range(ns.nb_mol_instances * ns.nb_beads_itp):
+                for ts in aa_universe.trajectory:
+                    for i in range(ns.nb_mol_instances):
 
-                    bead_id_sing = bead_id_mult % ns.nb_beads_initial
-                    bead_type = ns.cg_itp['atoms'][bead_id_sing]['bead_type']
+                        bead_id = i * ns.nb_beads_itp + phosphate_bead_id
+                        if ns.user_config['map_center'] == 'COM':
+                            cg_z_pos = mda_beads_atom_grps[bead_id].center(mda_weights_atom_grps[bead_id])[2]
+                        else:
+                            cg_z_pos = mda_beads_atom_grps[bead_id].center_of_geometry()[2]
+                        atom_id = i * ns.nb_mol_atoms + phosphate_atom_id
+                        aa_z_pos = aa_universe.atoms[atom_id].position[2]
 
-                    if bead_type in ns.cg_itp['beads_ids_per_beads_types_mult']:
-                        ns.cg_itp['beads_ids_per_beads_types_mult'][bead_type].append(bead_id_mult)
+                        # find if delta should be positive or negative by checking the position of an atom of the arm, far away from the head (here atom_id +60 with respect to phosphate id)
+                        ref_z_pos = aa_universe.atoms[atom_id + 60].position[2]
+                        if abs(cg_z_pos - ref_z_pos) > abs(aa_z_pos - ref_z_pos):
+                            all_Dhh_deltas[ts.frame * ns.nb_mol_instances + i] = -abs(
+                                aa_z_pos - cg_z_pos) / 10  # retrieve nm
+                        else:
+                            all_Dhh_deltas[ts.frame * ns.nb_mol_instances + i] = abs(
+                                aa_z_pos - cg_z_pos) / 10  # retrieve nm
+
+                avg_Dhh_delta = np.median(all_Dhh_deltas)
+                all_avg_Dhh_delta.append(avg_Dhh_delta)
+                print('    Median delta:', round(avg_Dhh_delta, 3), 'nm')
+
+                # calculate APL for AA data
+                print('\n  Calculating APL for AA data')
+                x_boxdims = []
+                for ts in aa_universe.trajectory:
+                    x_boxdims.append(ts.dimensions[
+                                         0])  # X-axis box size, Y is in principle identical and Z size is orthogonal to the bilayer
+                x_boxdims = np.array(x_boxdims)
+
+                apl_avg = round(np.mean(x_boxdims ** 2 / (ns.nb_mol_instances / 2)) / 100, 4)
+                apl_std = round(np.std(x_boxdims ** 2 / (ns.nb_mol_instances / 2)) / 100, 4)
+                print(f'    APL avg: {apl_avg} nm2')
+                print(f'    APL std: {apl_std} nm2')
+                ns.cg_itp['exp_data_' + temp]['apl_avg'] = apl_avg
+                ns.cg_itp['exp_data_' + temp]['apl_std'] = apl_std
+
+                # calculate Dhh for AA data
+                print('\n  Calculating Dhh thickness for AA data')
+
+                # Dhh thickness definition: here we will use the Phosphates positions to get average Z-axis positive and negative values, then use the distance between those points
+                # NOTE: we decided not to care about flip flops to calculate Z-axis positions, as this is probably done the same way in experimental calculations
+                #       (anyway the impact would be very small but really, who knows ??)
+
+                # get the id of the bead that should be used as reference for Dhh calculation + the delta for Dhh calculation, if any
+                head_type = lipid_code[2:]  # TODO: when we start incorporating lipids for which the code is not 4 letters this may NOT work
+                phosphate_atom_id = ns.user_config['phosphate_pos'][head_type]['AA']
+                phosphate_atom_id -= 1
+
+                # to ensure thickness calculations are not affected by bilayer being split on Z-axis PBC
+                # for each frame, calculate 2 thicknesses: 1. without changing anything AND 2. by shifting the upper half of the box below the lower half THEN 3. take minimum thickness value
+                phos_z_dists = []
+
+                for ts in aa_universe.trajectory:
+
+                    z_all = np.empty(ns.nb_mol_instances)
+                    for i in range(ns.nb_mol_instances):
+                        id_phos = i * ns.nb_mol_atoms + phosphate_atom_id
+                        z_phos = aa_universe.atoms[id_phos].position[2]
+                        z_all[i] = z_phos
+
+                    # 1. without correction
+                    z_avg = np.mean(
+                        z_all)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
+                    z_pos, z_neg = [], []
+                    for i in range(ns.nb_mol_instances):
+                        if z_all[i] > z_avg:
+                            z_pos.append(z_all[i])
+                        else:
+                            z_neg.append(z_all[i])
+                    phos_z_dists_1 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
+
+                    # 2. with correction
+                    for i in range(ns.nb_mol_instances):
+                        if z_all[i] > ts.dimensions[2] / 2:  # Z-axis box size
+                            z_all[i] -= ts.dimensions[2]
+                    z_avg = np.mean(
+                        z_all)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
+                    z_pos, z_neg = [], []
+                    for i in range(ns.nb_mol_instances):
+                        if z_all[i] > z_avg:
+                            z_pos.append(z_all[i])
+                        else:
+                            z_neg.append(z_all[i])
+                    phos_z_dists_2 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
+
+                    # 3. choose the appropriate thickness measurement
+                    if phos_z_dists_1 <= phos_z_dists_2:
+                        phos_z_dists.append(phos_z_dists_1)
                     else:
-                        ns.cg_itp['beads_ids_per_beads_types_mult'][bead_type] = [bead_id_mult]
+                        phos_z_dists.append(phos_z_dists_2)
 
-                # next we prepare the vector of beads for InterRDF
-                ns.cg_itp['rdf_pairs'] = {}  # key: beadtype1_beadtype2 sorted alphabetical
-                for bead_type_1 in ns.cg_itp['beads_ids_per_beads_types_mult']:
-                    for bead_type_2 in ns.cg_itp['beads_ids_per_beads_types_mult']:
-                        sorted_beads_types = sorted([bead_type_1, bead_type_2])  # conserve the ordering
-                        pair_type = '_'.join(sorted_beads_types)
-                        ns.cg_itp['rdf_pairs'][pair_type] = [
-                            ns.cg_itp['beads_ids_per_beads_types_mult'][sorted_beads_types[0]],
-                            ns.cg_itp['beads_ids_per_beads_types_mult'][sorted_beads_types[1]]]
+                Dhh_avg = round(np.mean(phos_z_dists), 4)
+                Dhh_std = round(np.std(phos_z_dists), 4)
+                print('    Dhh avg:', Dhh_avg, 'nm')
+                print('    Dhh std:', Dhh_std, 'nm')
+                ns.cg_itp['exp_data_' + temp]['Dhh_avg'] = Dhh_avg
+                ns.cg_itp['exp_data_' + temp]['Dhh_std'] = Dhh_std
 
-            # some more consistency checks for the other temperatures found after the very first one for given lipid
-            else:
-                if ns.nb_mol_instances != len(aa_universe.residues):
-                    sys.exit(
-                        '\nNumber of molecules are inconsistent in traj files across temperatures for lipid ' + lipid_code)
-                elif ns.nb_mol_atoms != len(aa_universe.residues[0].atoms):
-                    sys.exit(
-                        '\nNumber of atoms of 1st molecule found in traj files are inconsistent across temperatures for lipid ' + lipid_code)
-                else:
-                    # print('  Number of molecules and atoms is consistent with first read trajectory')
-                    pass
+                # calculate RDFs
+                print('\n  Calculating reference AA-mapped RDFs')
+                rdf_start = datetime.now().timestamp()
+                ns.cg_itp['rdf_' + temp + '_short'], ns.cg_itp['rdf_' + temp + '_long'] = {}, {}
 
-            # storage of AA data: APL and Dhh for each temperature
-            ns.cg_itp['exp_data_' + temp] = {}
+                for pair_type in sorted(ns.cg_itp['rdf_pairs']):
+                    bead_type_1, bead_type_2 = pair_type.split('_')
 
-            # it seems MDA AtomGroups are copies, then it's necessary to re-create the atom groups for each new reference trajectory
-            mda_beads_atom_grps, mda_weights_atom_grps = get_beads_MDA_atomgroups(ns, aa_universe)  # for each CG bead, create atom groups for mapped geoms calculation using COM or COG
+                    ag1 = mda.AtomGroup(ns.cg_itp['rdf_pairs'][pair_type][0], aa2cg_universe)
+                    ag2 = mda.AtomGroup(ns.cg_itp['rdf_pairs'][pair_type][1], aa2cg_universe)
 
-            print('\n  Mapping the trajectory from AA to CG representation')
-            aa2cg_universe = initialize_cg_traj(ns)
-            aa2cg_universe = map_aa2cg_traj(ns, aa_universe, aa2cg_universe, mda_beads_atom_grps, mda_weights_atom_grps)
+                    # here we ignore all pairs of beads types that are involved in bonded interactions (i.e. from the same molecule),
+                    # as this would only add noise into the scoring function
+                    # note that the exclusion block is NOT the number of atoms per molecule,
+                    # but the numbers of ATOMS PROVIDED PER MOLECULE in the input 2 first arguments to InterRDF
+                    irdf_short = rdf.InterRDF(ag1, ag2, nbins=round(ns.user_config['cutoff_rdfs'] / ns.user_config['bw_rdfs']),
+                                              range=(0, ns.user_config['cutoff_rdfs'] * 10), exclusion_block=(
+                        len(ns.cg_itp['beads_ids_per_beads_types_sing'][bead_type_1]),
+                        len(ns.cg_itp['beads_ids_per_beads_types_sing'][bead_type_2])))
 
-            # calculate Dhh delta for perfect thickness calculations
-            # NOTE: it works because trajectories are WHOLE for each molecule
-            print('\n  Calculating Dhh delta of phosphate position between AA-CG')
-            # NOTE: when we start incorporating lipids for which the code is not 4 letters this will NOT work
-            head_type = lipid_code[2:]
-            phosphate_atom_id = ns.user_config['phosphate_pos'][head_type]['AA']
-            phosphate_bead_id = ns.user_config['phosphate_pos'][head_type]['CG']
-            phosphate_bead_id -= 1  # retrieve 0-indexing
-            phosphate_atom_id -= 1
-            all_Dhh_deltas = np.empty(len(aa_universe.trajectory) * ns.nb_mol_instances, dtype=np.float32)
+                    irdf_short.run(step=round(len(aa2cg_universe.trajectory) / ns.rdf_frames))
 
-            for ts in aa_universe.trajectory:
-                for i in range(ns.nb_mol_instances):
+                    rdf_norm = irdf_short.count / ns.vol_shell
+                    rdf_count = irdf_short.count  # scale for percentage error
 
-                    bead_id = i * ns.nb_beads_itp + phosphate_bead_id
-                    if ns.user_config['map_center'] == 'COM':
-                        cg_z_pos = mda_beads_atom_grps[bead_id].center(mda_weights_atom_grps[bead_id])[2]
-                    else:
-                        cg_z_pos = mda_beads_atom_grps[bead_id].center_of_geometry()[2]
-                    atom_id = i * ns.nb_mol_atoms + phosphate_atom_id
-                    aa_z_pos = aa_universe.atoms[atom_id].position[2]
+                    # attempt to weight the independant RDF in the scoring that will come later
+                    last_id = np.where(ns.bins_vol_shell == 1.5)[0][
+                        0]  # index of the bin for which the volume is 1.5 nm
+                    ns.rdf_indep_weights[lipid_code][temp][pair_type] = np.sum(rdf_count[:last_id + 1])
 
-                    # find if delta should be positive or negative by checking the position of an atom of the arm, far away from the head (here atom_id +60 with respect to phosphate id)
-                    ref_z_pos = aa_universe.atoms[atom_id + 60].position[2]
-                    if abs(cg_z_pos - ref_z_pos) > abs(aa_z_pos - ref_z_pos):
-                        all_Dhh_deltas[ts.frame * ns.nb_mol_instances + i] = -abs(
-                            aa_z_pos - cg_z_pos) / 10  # retrieve nm
-                    else:
-                        all_Dhh_deltas[ts.frame * ns.nb_mol_instances + i] = abs(
-                            aa_z_pos - cg_z_pos) / 10  # retrieve nm
+                    ns.cg_itp['rdf_' + temp + '_short'][pair_type] = rdf_count, rdf_norm
 
-            avg_Dhh_delta = np.median(all_Dhh_deltas)
-            all_avg_Dhh_delta.append(avg_Dhh_delta)
-            print('    Median delta:', round(avg_Dhh_delta, 3), 'nm')
+                rdf_time = datetime.now().timestamp() - rdf_start
+                print(f"    Time for RDFs calculation: {round(rdf_time/60, 2)} min ({ns.rdf_frames} frames)")
 
-            # calculate APL for AA data
-            print('\n  Calculating APL for AA data')
-            x_boxdims = []
-            for ts in aa_universe.trajectory:
-                x_boxdims.append(ts.dimensions[
-                                     0])  # X-axis box size, Y is in principle identical and Z size is orthogonal to the bilayer
-            x_boxdims = np.array(x_boxdims)
+                print('\n  Calculating reference AA-mapped geoms distributions')
+                geoms_start = datetime.now().timestamp()
 
-            apl_avg = round(np.mean(x_boxdims ** 2 / (ns.nb_mol_instances / 2)) / 100, 4)
-            apl_std = round(np.std(x_boxdims ** 2 / (ns.nb_mol_instances / 2)) / 100, 4)
-            print(f'    APL avg: {apl_avg} nm2')
-            print(f'    APL std: {apl_std} nm2')
-            ns.cg_itp['exp_data_' + temp]['apl_avg'] = apl_avg
-            ns.cg_itp['exp_data_' + temp]['apl_std'] = apl_std
+                # create all ref atom histograms to be used for pairwise distributions comparisons + find average geoms values as first guesses (without BI at this point)
+                # get ref atom hists + find very first distances guesses for constraints groups
+                for grp_constraint in range(ns.nb_constraints):
+                    constraint_avg, constraint_hist, constraint_values = get_AA_bonds_distrib(ns, beads_ids=
+                    ns.cg_itp['constraint'][grp_constraint]['beads'], grp_type='constraint', uni=aa2cg_universe)
+                    # ns.cg_itp['constraint'][grp_constraint]['value'] = constraint_avg # taken from ITP
+                    ns.cg_itp['constraint'][grp_constraint]['avg_' + temp] = constraint_avg
+                    ns.cg_itp['constraint'][grp_constraint]['hist_' + temp] = constraint_hist
+                    dom_restricted = np.flatnonzero(constraint_hist > np.max(constraint_hist) * ns.user_config['eq_val_density_thres_constraints'])
+                    eq_val_min, eq_val_max = ns.bins_constraints[dom_restricted[0] + 1], ns.bins_constraints[dom_restricted[-1]]
+                    ns.cg_itp['constraint'][grp_constraint]['values_dom_' + temp] = [
+                        round(eq_val_min, 3),
+                        round(eq_val_max, 3)]  # boundaries of geom values
 
-            # calculate Dhh for AA data
-            print('\n  Calculating Dhh thickness for AA data')
+                # get ref atom hists + find very first distances and force constants guesses for bonds groups
+                for grp_bond in range(ns.nb_bonds):
+                    bond_avg, bond_hist, bond_values = get_AA_bonds_distrib(ns, beads_ids=
+                    ns.cg_itp['bond'][grp_bond]['beads'], grp_type='bond', uni=aa2cg_universe)
+                    # ns.cg_itp['bond'][grp_bond]['value'] = bond_avg # taken from ITP
+                    ns.cg_itp['bond'][grp_bond]['avg_' + temp] = bond_avg
+                    ns.cg_itp['bond'][grp_bond]['hist_' + temp] = bond_hist
+                    dom_restricted = np.flatnonzero(bond_hist > np.max(bond_hist) * ns.user_config['eq_val_density_thres_bonds'])
+                    eq_val_min, eq_val_max = ns.bins_bonds[dom_restricted[0] + 1], ns.bins_bonds[dom_restricted[-1]]
+                    ns.cg_itp['bond'][grp_bond]['values_dom_' + temp] = [round(eq_val_min, 3),
+                                                                         round(eq_val_max, 3)]  # boundaries of geom values
 
-            # Dhh thickness definition: here we will use the Phosphates positions to get average Z-axis positive and negative values, then use the distance between those points
-            # NOTE: we decided not to care about flip flops to calculate Z-axis positions, as this is probably done the same way in experimental calculations
-            #       (anyway the impact would be very small but really, who knows ??)
+                # get ref atom hists + find very first values and force constants guesses for angles groups
+                for grp_angle in range(ns.nb_angles):
+                    angle_avg, angle_hist, angle_values_deg = get_AA_angles_distrib(ns, beads_ids=
+                    ns.cg_itp['angle'][grp_angle]['beads'], uni=aa2cg_universe)
+                    # ns.cg_itp['angle'][grp_angle]['value'] = angle_avg # taken from ITP
+                    ns.cg_itp['angle'][grp_angle]['avg_' + temp] = angle_avg
+                    ns.cg_itp['angle'][grp_angle]['hist_' + temp] = angle_hist
+                    dom_restricted = np.flatnonzero(angle_hist > np.max(angle_hist) * ns.user_config['eq_val_density_thres_angles'])
+                    eq_val_min, eq_val_max = ns.bins_angles[dom_restricted[0] + 1], ns.bins_angles[dom_restricted[-1]]
+                    ns.cg_itp['angle'][grp_angle]['values_dom_' + temp] = [round(eq_val_min, 2),
+                                                                           round(eq_val_max, 2)]  # boundaries of geom values
 
-            # get the id of the bead that should be used as reference for Dhh calculation + the delta for Dhh calculation, if any
-            head_type = lipid_code[2:]  # TODO: when we start incorporating lipids for which the code is not 4 letters this may NOT work
-            phosphate_atom_id = ns.user_config['phosphate_pos'][head_type]['AA']
-            phosphate_atom_id -= 1
+                # # get ref atom hists + find very first values and force constants guesses for dihedrals groups
+                # for grp_dihedral in range(ns.nb_dihedrals):
 
-            # to ensure thickness calculations are not affected by bilayer being split on Z-axis PBC
-            # for each frame, calculate 2 thicknesses: 1. without changing anything AND 2. by shifting the upper half of the box below the lower half THEN 3. take minimum thickness value
-            phos_z_dists = []
+                #   dihedral_avg, dihedral_hist, dihedral_values_deg = get_AA_dihedrals_distrib_single(ns, beads_ids=ns.cg_itp['dihedral'][grp_dihedral]['beads'], uni=aa2cg_universe)
+                #   # ns.cg_itp['dihedral'][grp_dihedral]['value'] = dihedral_avg # taken from ITP
+                #   ns.cg_itp['dihedral'][grp_dihedral]['avg_'+temp] = dihedral_avg
+                #   ns.cg_itp['dihedral'][grp_dihedral]['hist_'+temp] = dihedral_hist
+                #   ns.cg_itp['dihedral'][grp_dihedral]['values_dom_'+temp] = [round(np.min(dihedral_values_deg), 2), round(np.max(dihedral_values_deg), 2)] # boundaries of geom values
 
-            for ts in aa_universe.trajectory:
+                geoms_time = datetime.now().timestamp() - geoms_start
+                print('    Time for geoms distributions calculation:', round(geoms_time / 60, 2),
+                      'min (' + str(len(aa2cg_universe.trajectory)) + ' frames)')
 
-                z_all = np.empty(ns.nb_mol_instances)
-                for i in range(ns.nb_mol_instances):
-                    id_phos = i * ns.nb_mol_atoms + phosphate_atom_id
-                    z_phos = aa_universe.atoms[id_phos].position[2]
-                    z_all[i] = z_phos
-
-                # 1. without correction
-                z_avg = np.mean(
-                    z_all)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-                z_pos, z_neg = [], []
-                for i in range(ns.nb_mol_instances):
-                    if z_all[i] > z_avg:
-                        z_pos.append(z_all[i])
-                    else:
-                        z_neg.append(z_all[i])
-                phos_z_dists_1 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
-
-                # 2. with correction
-                for i in range(ns.nb_mol_instances):
-                    if z_all[i] > ts.dimensions[2] / 2:  # Z-axis box size
-                        z_all[i] -= ts.dimensions[2]
-                z_avg = np.mean(
-                    z_all)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-                z_pos, z_neg = [], []
-                for i in range(ns.nb_mol_instances):
-                    if z_all[i] > z_avg:
-                        z_pos.append(z_all[i])
-                    else:
-                        z_neg.append(z_all[i])
-                phos_z_dists_2 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
-
-                # 3. choose the appropriate thickness measurement
-                if phos_z_dists_1 <= phos_z_dists_2:
-                    phos_z_dists.append(phos_z_dists_1)
-                else:
-                    phos_z_dists.append(phos_z_dists_2)
-
-            Dhh_avg = round(np.mean(phos_z_dists), 4)
-            Dhh_std = round(np.std(phos_z_dists), 4)
-            print('    Dhh avg:', Dhh_avg, 'nm')
-            print('    Dhh std:', Dhh_std, 'nm')
-            ns.cg_itp['exp_data_' + temp]['Dhh_avg'] = Dhh_avg
-            ns.cg_itp['exp_data_' + temp]['Dhh_std'] = Dhh_std
-
-            # calculate RDFs
-            print('\n  Calculating reference AA-mapped RDFs')
-            rdf_start = datetime.now().timestamp()
-            ns.cg_itp['rdf_' + temp + '_short'], ns.cg_itp['rdf_' + temp + '_long'] = {}, {}
-
-            for pair_type in sorted(ns.cg_itp['rdf_pairs']):
-                bead_type_1, bead_type_2 = pair_type.split('_')
-
-                ag1 = mda.AtomGroup(ns.cg_itp['rdf_pairs'][pair_type][0], aa2cg_universe)
-                ag2 = mda.AtomGroup(ns.cg_itp['rdf_pairs'][pair_type][1], aa2cg_universe)
-
-                # here we ignore all pairs of beads types that are involved in bonded interactions (i.e. from the same molecule),
-                # as this would only add noise into the scoring function
-                # note that the exclusion block is NOT the number of atoms per molecule,
-                # but the numbers of ATOMS PROVIDED PER MOLECULE in the input 2 first arguments to InterRDF
-                irdf_short = rdf.InterRDF(ag1, ag2, nbins=round(ns.user_config['cutoff_rdfs'] / ns.user_config['bw_rdfs']),
-                                          range=(0, ns.user_config['cutoff_rdfs'] * 10), exclusion_block=(
-                    len(ns.cg_itp['beads_ids_per_beads_types_sing'][bead_type_1]),
-                    len(ns.cg_itp['beads_ids_per_beads_types_sing'][bead_type_2])))
-
-                irdf_short.run(step=round(len(aa2cg_universe.trajectory) / ns.rdf_frames))
-
-                rdf_norm = irdf_short.count / ns.vol_shell
-                rdf_count = irdf_short.count  # scale for percentage error
-
-                # attempt to weight the independant RDF in the scoring that will come later
-                last_id = np.where(ns.bins_vol_shell == 1.5)[0][
-                    0]  # index of the bin for which the volume is 1.5 nm
-                ns.rdf_indep_weights[lipid_code][temp][pair_type] = np.sum(rdf_count[:last_id + 1])
-
-                ns.cg_itp['rdf_' + temp + '_short'][pair_type] = rdf_count, rdf_norm
-
-            rdf_time = datetime.now().timestamp() - rdf_start
-            print('    Time for RDFs calculation:', round(rdf_time / 60, 2),
-                  'min (' + str(ns.rdf_frames) + ' frames)')
-
-            print('\n  Calculating reference AA-mapped geoms distributions')
-            geoms_start = datetime.now().timestamp()
-
-            # create all ref atom histograms to be used for pairwise distributions comparisons + find average geoms values as first guesses (without BI at this point)
-            # get ref atom hists + find very first distances guesses for constraints groups
-            for grp_constraint in range(ns.nb_constraints):
-                constraint_avg, constraint_hist, constraint_values = get_AA_bonds_distrib(ns, beads_ids=
-                ns.cg_itp['constraint'][grp_constraint]['beads'], grp_type='constraint', uni=aa2cg_universe)
-                # ns.cg_itp['constraint'][grp_constraint]['value'] = constraint_avg # taken from ITP
-                ns.cg_itp['constraint'][grp_constraint]['avg_' + temp] = constraint_avg
-                ns.cg_itp['constraint'][grp_constraint]['hist_' + temp] = constraint_hist
-                dom_restricted = np.flatnonzero(constraint_hist > np.max(constraint_hist) * ns.user_config['eq_val_density_thres_constraints'])
-                eq_val_min, eq_val_max = ns.bins_constraints[dom_restricted[0] + 1], ns.bins_constraints[dom_restricted[-1]]
-                ns.cg_itp['constraint'][grp_constraint]['values_dom_' + temp] = [
-                    round(eq_val_min, 3),
-                    round(eq_val_max, 3)]  # boundaries of geom values
-
-            # get ref atom hists + find very first distances and force constants guesses for bonds groups
-            for grp_bond in range(ns.nb_bonds):
-                bond_avg, bond_hist, bond_values = get_AA_bonds_distrib(ns, beads_ids=
-                ns.cg_itp['bond'][grp_bond]['beads'], grp_type='bond', uni=aa2cg_universe)
-                # ns.cg_itp['bond'][grp_bond]['value'] = bond_avg # taken from ITP
-                ns.cg_itp['bond'][grp_bond]['avg_' + temp] = bond_avg
-                ns.cg_itp['bond'][grp_bond]['hist_' + temp] = bond_hist
-                dom_restricted = np.flatnonzero(bond_hist > np.max(bond_hist) * ns.user_config['eq_val_density_thres_bonds'])
-                eq_val_min, eq_val_max = ns.bins_bonds[dom_restricted[0] + 1], ns.bins_bonds[dom_restricted[-1]]
-                ns.cg_itp['bond'][grp_bond]['values_dom_' + temp] = [round(eq_val_min, 3),
-                                                                     round(eq_val_max, 3)]  # boundaries of geom values
-
-            # get ref atom hists + find very first values and force constants guesses for angles groups
-            for grp_angle in range(ns.nb_angles):
-                angle_avg, angle_hist, angle_values_deg = get_AA_angles_distrib(ns, beads_ids=
-                ns.cg_itp['angle'][grp_angle]['beads'], uni=aa2cg_universe)
-                # ns.cg_itp['angle'][grp_angle]['value'] = angle_avg # taken from ITP
-                ns.cg_itp['angle'][grp_angle]['avg_' + temp] = angle_avg
-                ns.cg_itp['angle'][grp_angle]['hist_' + temp] = angle_hist
-                dom_restricted = np.flatnonzero(angle_hist > np.max(angle_hist) * ns.user_config['eq_val_density_thres_angles'])
-                eq_val_min, eq_val_max = ns.bins_angles[dom_restricted[0] + 1], ns.bins_angles[dom_restricted[-1]]
-                ns.cg_itp['angle'][grp_angle]['values_dom_' + temp] = [round(eq_val_min, 2),
-                                                                       round(eq_val_max, 2)]  # boundaries of geom values
-
-            # # get ref atom hists + find very first values and force constants guesses for dihedrals groups
-            # for grp_dihedral in range(ns.nb_dihedrals):
-
-            #   dihedral_avg, dihedral_hist, dihedral_values_deg = get_AA_dihedrals_distrib_single(ns, beads_ids=ns.cg_itp['dihedral'][grp_dihedral]['beads'], uni=aa2cg_universe)
-            #   # ns.cg_itp['dihedral'][grp_dihedral]['value'] = dihedral_avg # taken from ITP
-            #   ns.cg_itp['dihedral'][grp_dihedral]['avg_'+temp] = dihedral_avg
-            #   ns.cg_itp['dihedral'][grp_dihedral]['hist_'+temp] = dihedral_hist
-            #   ns.cg_itp['dihedral'][grp_dihedral]['values_dom_'+temp] = [round(np.min(dihedral_values_deg), 2), round(np.max(dihedral_values_deg), 2)] # boundaries of geom values
-
-            geoms_time = datetime.now().timestamp() - geoms_start
-            print('    Time for geoms distributions calculation:', round(geoms_time / 60, 2),
-                  'min (' + str(len(aa2cg_universe.trajectory)) + ' frames)')
+        # TODO: this is just for going fast while doing the 5 and 8 beads, in the future we just discard low-resolution stuff
+        #       or this will have to be provided via the config file if the objective is exclusively top-down
+        # all_avg_Dhh_delta = [0.1]  # this is for the 8 beads models
+        all_avg_Dhh_delta = [0.157]  # this is for the 5 beads models
 
         # store some metadata
         ns.cg_itp['meta'] = {'nb_mols': ns.nb_mol_instances, 'nb_beads': ns.nb_beads_itp,
@@ -883,126 +883,110 @@ ns.params_val = {}
 print()
 print('Collecting bonds and angles values from AA mapped data')
 
-for geom_grp in ns.all_constraints_types:
-
-    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf],
-                               'avg': []}  # find min/max values of bonds in the geom group at all selected temperatures + average of their average value
-    # ns.all_params_opti.append({geom_grp: X}) # for constraints we tune nothing, there is no force constant and the equi value comes either from AA or config file
-    geom_grp_val = []
-
-    for lipid_code in ns.all_constraints_types[geom_grp]:
-        for constraint_id in ns.all_constraints_types[geom_grp][lipid_code]:
-            for temp in ns.user_config['lipids_codes'][lipid_code]:
-                values_dom = ns.cg_itps[lipid_code]['constraint'][constraint_id]['values_dom_' + temp]
-                ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0])
-                ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1])
-                # print('Geom', geom_grp, 'got his range defined/updated to:', ns.params_val[geom_grp]['range'])
-
-                # if ns.geoms_val_from_cfg:
-                # 	ns.params_val[geom_grp]['avg'].append(ns.cg_itps[lipid_code]['bond'][bond_id]['value']) # to start from config file bonds lengths
-                # else:
-                # ns.params_val[geom_grp]['avg'].append(ns.cg_itps[lipid_code]['constraint'][constraint_id]['avg_'+temp]) # to start from average constraints lengths from AA mapped data
-                geom_grp_val.append(ns.cg_itps[lipid_code]['constraint'][constraint_id]['avg_' + temp])
-
-    geom_grp_std = round(np.std(geom_grp_val), 3)
-    geom_grp_avg = round(np.mean(geom_grp_val), 3)
-    ns.params_val[geom_grp]['avg'] = geom_grp_avg
-
-    if ns.bonds_equi_val_from_config:
-        equi_val = ns.user_config['init_bonded'][geom_grp]['val']
-    else:
-        equi_val = geom_grp_avg
-
-    for lipid_code in ns.all_constraints_types[geom_grp]:  # attribute average value
-        for constraint_id in ns.all_constraints_types[geom_grp][lipid_code]:
-            ns.cg_itps[lipid_code]['constraint'][constraint_id]['value'] = equi_val
-
-    print(' ', geom_grp, '-- Avg:', geom_grp_avg, '-- Used:', equi_val, '-- Std:', geom_grp_std, '-- Range:',
-          ns.params_val[geom_grp]['range'])
+# for geom_grp in ns.all_constraints_types:
+#
+#     ns.params_val[geom_grp] = {'range': [np.inf, -np.inf],
+#                                'avg': []}  # find min/max values of bonds in the geom group at all selected temperatures + average of their average value
+#     # ns.all_params_opti.append({geom_grp: X}) # for constraints we tune nothing, there is no force constant and the equi value comes either from AA or config file
+#     geom_grp_val = []
+#
+#     for lipid_code in ns.all_constraints_types[geom_grp]:
+#         for constraint_id in ns.all_constraints_types[geom_grp][lipid_code]:
+#             for temp in ns.user_config['lipids_codes'][lipid_code]:
+#
+#                 values_dom = ns.cg_itps[lipid_code]['constraint'][constraint_id]['values_dom_' + temp]
+#                 ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0])
+#                 ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1])
+#                 geom_grp_val.append(ns.cg_itps[lipid_code]['constraint'][constraint_id]['avg_' + temp])
+#
+#     geom_grp_std = round(np.std(geom_grp_val), 3)
+#     geom_grp_avg = round(np.mean(geom_grp_val), 3)
+#     ns.params_val[geom_grp]['avg'] = geom_grp_avg
+#
+#     if ns.bonds_equi_val_from_config:
+#         equi_val = ns.user_config['init_bonded'][geom_grp]['val']
+#     else:
+#         equi_val = geom_grp_avg
+#
+#     for lipid_code in ns.all_constraints_types[geom_grp]:  # attribute average value
+#         for constraint_id in ns.all_constraints_types[geom_grp][lipid_code]:
+#             ns.cg_itps[lipid_code]['constraint'][constraint_id]['value'] = equi_val
+#
+#     print(' ', geom_grp, '-- Avg:', geom_grp_avg, '-- Used:', equi_val, '-- Std:', geom_grp_std, '-- Range:',
+#           ns.params_val[geom_grp]['range'])
 
 for geom_grp in ns.all_bonds_types:
 
-    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf],
-                               'avg': []}  # find min/max values of bonds in the geom group at all selected temperatures + average of their average value
+    # find min/max values of bonds in the geom group at all selected temperatures + average of their average value
+    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'ref': None}
 
     if geom_grp in ns.user_config['tune_bonds_equi_val']:
         ns.all_params_opti.append(f'{geom_grp}_val')
     if geom_grp in ns.user_config['tune_bonds_fct']:
         ns.all_params_opti.append(f'{geom_grp}_fct')
-    geom_grp_val = []
 
-    for lipid_code in ns.all_bonds_types[geom_grp]:
-        for bond_id in ns.all_bonds_types[geom_grp][lipid_code]:
-            for temp in ns.user_config['lipids_codes'][lipid_code]:
+    # if user has specified that we make use of the simulations available for this lipid in the bottom-up scoring
+    if ns.user_config['reference_AA_weight'][lipid_code] > 0:
 
-                values_dom = ns.cg_itps[lipid_code]['bond'][bond_id]['values_dom_' + temp]
-
-                # if ns.bonds_equi_val_from_config:
-                #     ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0],
-                #                                               ns.user_config['init_bonded'][geom_grp][
-                #                                                   'val'])
-                #     ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1],
-                #                                               ns.user_config['init_bonded'][geom_grp][
-                #                                                   'val'])
-                # else:
-                ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0])
-                ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1])
-                # print('Geom', geom_grp, 'got his range defined/updated to:', ns.params_val[geom_grp]['range'])
-
-                # if ns.geoms_val_from_cfg:
-                # 	ns.params_val[geom_grp]['avg'].append(ns.cg_itps[lipid_code]['bond'][bond_id]['value']) # to start from config file bonds lengths
-                # else:
-                # ns.params_val[geom_grp]['avg'].append(ns.cg_itps[lipid_code]['bond'][bond_id]['avg_'+temp]) # to start from average bonds lengths from AA mapped data
-                geom_grp_val.append(ns.cg_itps[lipid_code]['bond'][bond_id]['avg_' + temp])
-
-    geom_grp_std = round(np.std(geom_grp_val), 3)
-    geom_grp_avg = round(np.mean(geom_grp_val), 3)
-    ns.params_val[geom_grp]['avg'] = geom_grp_avg
-
-    # if ns.bonds_equi_val_from_config:
-    if geom_grp in ns.user_config['tune_bonds_equi_val']:
-        equi_val = geom_grp_avg
+        geom_grp_val = []
+        for lipid_code in ns.all_bonds_types[geom_grp]:
+            for bond_id in ns.all_bonds_types[geom_grp][lipid_code]:
+                for temp in ns.user_config['lipids_codes'][lipid_code]:
+                    values_dom = ns.cg_itps[lipid_code]['bond'][bond_id]['values_dom_' + temp]
+                    ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0])
+                    ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1])
+                    geom_grp_val.append(ns.cg_itps[lipid_code]['bond'][bond_id]['avg_' + temp])
+        geom_grp_avg = round(np.mean(geom_grp_val), 3)
+        geom_grp_std = round(np.std(geom_grp_val), 3)
+        ns.params_val[geom_grp]['ref'] = geom_grp_avg
     else:
-        equi_val = ns.user_config['init_bonded'][geom_grp]['val']
+        ns.params_val[geom_grp]['range'][0] = round(ns.user_config['init_bonded'][geom_grp]['val'] - ns.user_config['bond_value_guess_variation'], 3)
+        ns.params_val[geom_grp]['range'][1] = round(ns.user_config['init_bonded'][geom_grp]['val'] + ns.user_config['bond_value_guess_variation'], 3)
+        geom_grp_avg = 'Unknown'
+        geom_grp_std = 'Unknown'
+        ns.params_val[geom_grp]['ref'] = ns.user_config['init_bonded'][geom_grp]['val']
 
-    for lipid_code in ns.all_bonds_types[geom_grp]:  # attribute average value
+    for lipid_code in ns.all_bonds_types[geom_grp]:  # attribute starting equilibrium value to the ITP containers
         for bond_id in ns.all_bonds_types[geom_grp][lipid_code]:
-            ns.cg_itps[lipid_code]['bond'][bond_id]['value'] = equi_val
+            ns.cg_itps[lipid_code]['bond'][bond_id]['value'] = ns.params_val[geom_grp]['ref']
 
-    print(f"  {geom_grp} -- Avg: {ns.params_val[geom_grp]['avg']} -- Std: {geom_grp_std} -- Used: {equi_val} -- Range: {ns.params_val[geom_grp]['range']}")
+    print(f"  {geom_grp} -- Reference: {ns.params_val[geom_grp]['ref']} -- Avg: {geom_grp_avg} -- Std: {geom_grp_std} -- Range: {ns.params_val[geom_grp]['range']}")
 
 for geom_grp in ns.all_angles_types:
 
-    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'avg': [],
-                               'avg_real': []}  # find min/max values of angles in the geom group at all selected temperatures + average of their average value
-    geom_grp_std = []
+    # find min/max values of angles in the geom group at all selected temperatures + average of their average value
+    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'ref': None}
 
     if geom_grp in ns.user_config['tune_angles_equi_val']:
         ns.all_params_opti.append(f'{geom_grp}_val')
     if geom_grp in ns.user_config['tune_angles_fct']:
         ns.all_params_opti.append(f'{geom_grp}_fct')
 
-    for lipid_code in ns.all_angles_types[geom_grp]:
-        for angle_id in ns.all_angles_types[geom_grp][lipid_code]:
-            for temp in ns.user_config['lipids_codes'][lipid_code]:
-                values_dom = ns.cg_itps[lipid_code]['angle'][angle_id]['values_dom_' + temp]
-                ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0])
-                ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1])
+    # if user has specified that we make use of the simulations available for this lipid in the bottom-up scoring
+    if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+        geom_grp_val = []
+        for lipid_code in ns.all_angles_types[geom_grp]:
+            for angle_id in ns.all_angles_types[geom_grp][lipid_code]:
+                for temp in ns.user_config['lipids_codes'][lipid_code]:
+                    values_dom = ns.cg_itps[lipid_code]['angle'][angle_id]['values_dom_' + temp]
+                    ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0])
+                    ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1])
+                    geom_grp_val.append(ns.cg_itps[lipid_code]['angle'][angle_id]['avg_' + temp])
+        geom_grp_avg = round(np.mean(geom_grp_val), 1)
+        geom_grp_std = round(np.std(geom_grp_val), 1)
+        ns.params_val[geom_grp]['ref'] = geom_grp_avg
+    else:
+        ns.params_val[geom_grp]['range'][0] = round(ns.user_config['init_bonded'][geom_grp]['val'] - ns.user_config['angle_value_guess_variation'], 1)
+        ns.params_val[geom_grp]['range'][1] = round(ns.user_config['init_bonded'][geom_grp]['val'] + ns.user_config['angle_value_guess_variation'], 1)
+        geom_grp_avg = 'Unknown'
+        geom_grp_std = 'Unknown'
+        ns.params_val[geom_grp]['ref'] = ns.user_config['init_bonded'][geom_grp]['val']
 
-                if geom_grp in ns.user_config['tune_angles_equi_val']:
-                    ns.params_val[geom_grp]['avg'].append(ns.cg_itps[lipid_code]['angle'][angle_id][
-                                                              'avg_' + temp])  # to start from average angles values from AA mapped data
-                else:
-                    ns.params_val[geom_grp]['avg'].append(ns.cg_itps[lipid_code]['angle'][angle_id][
-                                                              'value'])  # to start from config file angle values
-                ns.params_val[geom_grp]['avg_real'].append(ns.cg_itps[lipid_code]['angle'][angle_id]['avg_' + temp])
-                geom_grp_std.append(ns.cg_itps[lipid_code]['angle'][angle_id]['avg_' + temp])
+    for lipid_code in ns.all_angles_types[geom_grp]:  # attribute starting equilibrium value to the ITP containers
+        for bond_id in ns.all_angles_types[geom_grp][lipid_code]:
+            ns.cg_itps[lipid_code]['angle'][angle_id]['value'] = ns.params_val[geom_grp]['ref']
 
-    geom_grp_std = round(np.std(geom_grp_std), 3)
-    ns.params_val[geom_grp]['avg'] = round(np.mean(ns.params_val[geom_grp]['avg']), 1)
-    ns.params_val[geom_grp]['avg_real'] = round(np.mean(ns.params_val[geom_grp]['avg_real']), 1)
-
-    print(f"  {geom_grp} -- Avg: {ns.params_val[geom_grp]['avg_real']} -- Std: {geom_grp_std} -- Used: {ns.params_val[geom_grp]['avg']} -- Range: {ns.params_val[geom_grp]['range']}")
+    print(f"  {geom_grp} -- Reference: {ns.params_val[geom_grp]['ref']} -- Avg: {geom_grp_avg} -- Std: {geom_grp_std} -- Range: {ns.params_val[geom_grp]['range']}")
 
 if ns.user_config['tune_radii']:
     for radii_grp in sorted(ns.user_config['tune_radii_in_groups']):
@@ -1039,37 +1023,41 @@ for lipid_code in ns.lipid_params_opti:
 # PLOT RDF FOR EACH BEADS PAIR FOR EACH LIPID AT ALL TEMPERATURES #
 ###################################################################
 
-# RDFs -- Short cutoff
-for lipid_code in ns.user_config['lipids_codes']:
+# if user has specified that we make use of the simulations available for this lipid
+# in the bottom-up component of the score
+if ns.user_config['reference_AA_weight'][lipid_code] > 0:
 
-    nb_beads_types = len(ns.lipid_beads_types[lipid_code])
-    fig = plt.figure(figsize=(nb_beads_types * 3, nb_beads_types * 3))
-    ax = fig.subplots(nrows=nb_beads_types, ncols=nb_beads_types, squeeze=False)
+    # RDFs -- Short cutoff
+    for lipid_code in ns.user_config['lipids_codes']:
 
-    for i in range(nb_beads_types):  # matrix of LJ
-        for j in range(nb_beads_types):
+        nb_beads_types = len(ns.lipid_beads_types[lipid_code])
+        fig = plt.figure(figsize=(nb_beads_types * 3, nb_beads_types * 3))
+        ax = fig.subplots(nrows=nb_beads_types, ncols=nb_beads_types, squeeze=False)
 
-            if j >= i:
-                for temp in ns.user_config['lipids_codes'][lipid_code]:
-                    bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], \
-                                               ns.lipid_beads_types[lipid_code][j]
-                    pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
-                    _, rdf = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]
-                    rdf_norm = rdf / np.sum(rdf)  # norm to sum 1 for solo display
-                    ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, rdf_norm, label=temp)
+        for i in range(nb_beads_types):  # matrix of LJ
+            for j in range(nb_beads_types):
 
-                ax[i][j].set_title(bead_type_1 + ' ' + bead_type_2)
-                ax[i][j].grid()
-                ax[i][j].set_xlim(0, ns.user_config['cutoff_rdfs'])
-            # ax[i][j].legend()
-            else:
-                ax[i][j].set_visible(False)
+                if j >= i:
+                    for temp in ns.user_config['lipids_codes'][lipid_code]:
+                        bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], \
+                                                   ns.lipid_beads_types[lipid_code][j]
+                        pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
+                        _, rdf = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]
+                        rdf_norm = rdf / np.sum(rdf)  # norm to sum 1 for solo display
+                        ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, rdf_norm, label=temp)
 
-    plt.suptitle(lipid_code + ' ' + ' '.join(ns.user_config['lipids_codes'][lipid_code]))
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.savefig(
-        ns.user_config['exec_folder'] + '/RDF_ref_AA-mapped_' + lipid_code + '_cutoff_' + str(ns.user_config['cutoff_rdfs']) + '_nm.png')
-    plt.close(fig)
+                    ax[i][j].set_title(bead_type_1 + ' ' + bead_type_2)
+                    ax[i][j].grid()
+                    ax[i][j].set_xlim(0, ns.user_config['cutoff_rdfs'])
+                # ax[i][j].legend()
+                else:
+                    ax[i][j].set_visible(False)
+
+        plt.suptitle(lipid_code + ' ' + ' '.join(ns.user_config['lipids_codes'][lipid_code]))
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.savefig(
+            ns.user_config['exec_folder'] + '/RDF_ref_AA-mapped_' + lipid_code + '_cutoff_' + str(ns.user_config['cutoff_rdfs']) + '_nm.png')
+        plt.close(fig)
 
 
 ################################

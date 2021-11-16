@@ -9,7 +9,7 @@ solv: WET  # WET or DRY, for explicit or implicit solvent (defines where input f
 lipids_codes:  # lipids and temperatures to use for this optimization (other input files must be prepared accordingly)
   POPC: [303K]
   DOPC: [303K]
-map_center: COG  # COG or COM, for Center Of Geometry or Center Of Mass
+map_center: COG  # COG or COM, for using Center Of Geometry or Center Of Mass when reading the NDX files and getting the AA-mapped bottom-up ref. data
 reset: True  # if True, recalculates bond and angle distributions and distance distributions between pair of beads from the AA data
 phosphate_pos:  # position of the phosphate atom or bead, used for calculating Dhh membrane thickness
   PC:  # per head type
@@ -24,7 +24,7 @@ tune_bonds_fct: all  # 'all' or list of bond types for which force constants wil
 tune_angles_equi_val: [A2, A3, A4, A5, A6, A7, A8, A9, A10, A20, A21, A22]  # 'all' or list of angle types for which equilibrium values will be optimized or empty list
 tune_angles_fct: all  # 'all' or list of angle types for which force constants will be optimized or empty list
 tune_radii: False  # True or False, for tuning all radii for beads listed in 'init_beads_radii' (LJ sigma will be the sum of 2 radii for a pair of bead types)
-tune_radii_in_groups: None  # bead radii can be tuned in groups, using the same radii for several types of beads TODO: say "None" or dict struct
+tune_radii_in_groups: None  # bead radii can be tuned in groups, using the same radii for several types of beads
 tune_epsilons: True
 
 # 4. CONDITIONS OF THE OPTIMIZATION: RANGES OF THE PARAMETERS TO BE OPTIMIZED, THAT ARE ALLOWED TO BE EXPLORED
@@ -44,8 +44,8 @@ dhh_cap_perc_error: 30
 
 # 5. INITIALIZATION OF THE SWARM OF PARTICLES: AMPLITUDE OF THE VARIATIONS CREATED RANDOMLY AROUND THE STARTING FF PARAMETERS
 #    (i.e. DEFINES +/- RANGES FOR RANDOM VARIATIONS AROUND VALUES IN 'init_bonded', 'init_nonbonded' and 'init_beads_radii')
-bond_value_guess_variation: 0.02  # nm
-angle_value_guess_variation: 20  # degrees
+bond_value_guess_variation: 0.02  # nm, defines also the allowed parameter search range in top-down calibration of bonds equilibrium values
+angle_value_guess_variation: 20  # degrees, defines also the allowed parameter search range in top-down calibration of angles equilibrium values
 bond_fct_guess_variation: 3000  # fct units
 angle_fct_guess_variation: 15  # fct units
 radius_guess_variation: 0.10  # nm
@@ -188,7 +188,7 @@ exp_data:
     303K: { apl: 0.711, Dhh: 3.30 }
 
 # 15. WEIGHT/CONFIDENCE ATTRIBUTED TO/INTO THE REFERENCE AA TRAJECTORIES
-reference_AA_weight:
+reference_AA_weight:  # setting value to 0 will disable the usage of the bottom-up component for a given lipid
   POPC: 1.0
   DOPC: 1.0
   DPPC: 1.0
