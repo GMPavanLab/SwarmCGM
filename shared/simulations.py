@@ -22,10 +22,8 @@ def gmx_args(gmx_cmd, nb_threads, gpu_id, gmx_additional_args_str, gmx_gpu_cance
 
 def run_sims(ns, slot_nt, slot_gpu_id):
 
+    # start from frames provided in directory START_CG_SETUPS, and we will do mini/equi/prod
     gmx_start = datetime.now().timestamp()
-    # print('Starting run_sims() from dir:', os.getcwd())
-
-    # start from the mapped AA frames -- and we will do mini/equi/prod
     starting_frame = 'start_frame.gro'
 
     # grompp -- MINI
@@ -36,8 +34,7 @@ def run_sims(ns, slot_nt, slot_gpu_id):
     if os.path.isfile('mini.tpr'):
         # mdrun -- MINI
         gmx_cmd = gmx_args(f"{ns.user_config['gmx_path']} mdrun -deffnm mini", slot_nt, slot_gpu_id, ns.user_config['gmx_mini_additional_args_str'], ns.user_config['gmx_gpu_cancel_str'])
-        gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       preexec_fn=os.setsid)  # create a process group for the MINI run
+        gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)  # create a process group for the MINI run
 
         # check if MINI run is stuck because of instabilities
         cycles_check = 0
@@ -74,8 +71,7 @@ def run_sims(ns, slot_nt, slot_gpu_id):
         if os.path.isfile('equi.tpr'):
             # mdrun -- EQUI
             gmx_cmd = gmx_args(f"{ns.user_config['gmx_path']} mdrun -deffnm equi", slot_nt, slot_gpu_id, ns.user_config['gmx_equi_additional_args_str'], ns.user_config['gmx_gpu_cancel_str'])
-            gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                           preexec_fn=os.setsid)  # create a process group for the EQUI run
+            gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)  # create a process group for the EQUI run
 
             # check if EQUI run is stuck because of instabilities
             cycles_check = 0
@@ -154,8 +150,8 @@ def run_parallel(ns, job_exec_dir, nb_eval_particle, lipid_code, temp):
         for i in range(len(g_slots_states)):
             if g_slots_states[i] == 1:  # if slot is available
 
-                print(f'  Starting simulation for particle {nb_eval_particle} {lipid_code} {temp} on slot {i + 1}')
                 g_slots_states[i] = 0  # mark slot as busy
+                print(f'  Starting simulation for particle {nb_eval_particle} {lipid_code} {temp} on slot {i + 1}')
                 slot_nt = ns.slots_nts[i]
                 slot_gpu_id = ns.slots_gpu_ids[i]
                 # print(f'  Slot uses -nt {slot_nt} and -gpu_id {slot_gpu_id} and in directory {job_exec_dir}')

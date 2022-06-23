@@ -54,14 +54,12 @@ def create_files_and_dirs_for_swarm_iter(ns, parameters_sets, nb_eval_particles_
                             f'{current_eval_dir}/{lipid_code}_{temp}/index.ndx')
 
                 # 3. copy MDP files + adapt temperature etc on the fly
-                print_mdp_file(ns, mdp_filename_in=f'{config.cg_setups_data_dir}/{ns.cg_mini_mdp}',
+                print_mdp_file(ns, lipid_code, temp=None, mdp_filename_in=f'{config.cg_setups_data_dir}/{ns.cg_mini_mdp}',
                                mdp_filename_out=f'{current_eval_dir}/{lipid_code}_{temp}/mini.mdp', sim_type='mini')
-                print_mdp_file(ns, mdp_filename_in=f'{config.cg_setups_data_dir}/{ns.cg_equi_mdp}',
-                               mdp_filename_out=f'{current_eval_dir}/{lipid_code}_{temp}/equi.mdp', sim_type='equi',
-                               temp=temp[:-1])
-                print_mdp_file(ns, mdp_filename_in=f'{config.cg_setups_data_dir}/{ns.cg_prod_mdp}',
-                               mdp_filename_out=f'{current_eval_dir}/{lipid_code}_{temp}/prod.mdp', sim_type='prod',
-                               temp=temp[:-1])
+                print_mdp_file(ns, lipid_code, temp, mdp_filename_in=f'{config.cg_setups_data_dir}/{ns.cg_equi_mdp}',
+                               mdp_filename_out=f'{current_eval_dir}/{lipid_code}_{temp}/equi.mdp', sim_type='equi')
+                print_mdp_file(ns, lipid_code, temp, mdp_filename_in=f'{config.cg_setups_data_dir}/{ns.cg_prod_mdp}',
+                               mdp_filename_out=f'{current_eval_dir}/{lipid_code}_{temp}/prod.mdp', sim_type='prod')
 
                 # 4. create the new ITPs for each lipid (= the bonded parameters for the simulations happening within a swarm particle)
                 print_cg_itp_file(current_cg_itps[lipid_code], out_path_itp=f'{current_eval_dir}/{lipid_code}_{temp}/{lipid_code}.itp')
@@ -256,7 +254,6 @@ def eval_function_parallel_swarm(parameters_sets, args):
             slots_states[i] = 1  # mark slot as available
 
         with multiprocessing.Pool(processes=ns.nb_slots, initializer=init_process, initargs=(slots_states,)) as pool:
-
             p_args = zip(repeat(ns), p_job_exec_dir, p_nb_eval_particle, p_lipid_code, p_temp)
             p_res = pool.starmap(run_parallel, p_args)
             p_time_start_str, p_time_end_str, p_time_elapsed_str = list(map(list, zip(*p_res)))

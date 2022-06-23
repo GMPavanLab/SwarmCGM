@@ -41,7 +41,7 @@ class HPCJobs:
         self.nb_jobs_slurm_pending = 0
         self.nb_jobs_slurm_running = 0
         self.finished = False
-        self.job_priority = ['SDPC', 'PDPC', 'DOPC', 'POPC', 'DPPC', 'DMPC', 'DLPC']
+        self.job_priority = ['SDPC', 'PDPC', 'DOPC', 'POPC', 'DPPC', 'DMPC', 'DLPC']  # TODO: this is just some manual thing, handle this automatically
 
     def check_slurm_queue(self):
         self.nb_jobs_slurm_pending = 0
@@ -84,7 +84,7 @@ class HPCJobs:
 
                     # check if we need to kill
                     # TODO: this part about checking for stuck jobs and killing them is NOT well tested
-                    #       actually if too many jobs are allowed to start (when Daint is lightly used
+                    #       actually if too many jobs are allowed to start (when HPC is lightly used
                     #       and we could actually run like crazy) + the kill_delay is small (60 sec)
                     #       then it behaves badly and will kill jobs that are running OK !!
                     else:

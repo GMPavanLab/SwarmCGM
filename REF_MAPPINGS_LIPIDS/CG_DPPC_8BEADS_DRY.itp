@@ -1,0 +1,46 @@
+[moleculetype]
+; molname      nrexcl
+  DPPC         1
+
+
+[atoms]
+; id  type  resnr   residu  atom  cgnr  charge
+
+   1   K0    1       DPPC    K0    1     1.0
+   2   K1    1       DPPC    K1    2     -1.0
+
+   3   MS    1       DPPC    MSA   3     0
+   4   SB    1       DPPC    SBA   4     0
+   5   SB    1       DPPC    SBA   5     0
+
+   6   MS    1       DPPC    MSB   6     0
+   7   SB    1       DPPC    SBB   7     0
+   8   SB    1       DPPC    SBB   8     0
+
+
+[bonds]
+;  i    j   funct   length  force.c.
+
+   1    2       1        0        0     ; B1
+
+   2    3       1        0        0     ; B11
+   3    4       1        0        0     ; B6
+   4    5       1        0        0     ; B7
+
+   2    6       1        0        0     ; B10
+   6    7       1        0        0     ; B6
+   7    8       1        0        0     ; B7
+
+
+[angles]
+;  i    j    k   funct   length  force.c.
+
+   1    2    3       2        0        0     ; A6
+   1    2    6       2        0        0     ; A2
+;   3    2    6       2        0        0     ; A7
+
+   2    3    4       2        0        0     ; A13
+   3    4    5       2        0        0     ; A11
+
+   2    6    7       2        0        0     ; A10
+   6    7    8       2        0        0     ; A11

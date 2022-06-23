@@ -5,7 +5,7 @@ cg_setups_data_dir = 'START_CG_SETUPS'
 aa_data_dir = 'REF_AA_TRAJS_LIPIDS'
 
 # parameters rounding
-round_bases = {'bond_val': 0.001, 'bond_fct': 0.1, 'angle_val': 0.1, 'angle_fct': 0.1, 'LJ_sig': 0.001, 'LJ_eps': 0.01}
+round_bases = {'bond_val': 0.001, 'bond_fct': 0.01, 'angle_val': 0.01, 'angle_fct': 0.01, 'LJ_sig': 0.001, 'LJ_eps': 0.01}
 
 # plots display parameters
 line_alpha = 0.50  # line alpha for the density plots

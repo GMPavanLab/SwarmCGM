@@ -19,7 +19,7 @@ def print_stdout_forced(*args, **kwargs):
 
 
 # modify MDP file to adjust simulation temperature, duration or other parameters
-def print_mdp_file(ns, mdp_filename_in, mdp_filename_out, sim_type, temp=None):
+def print_mdp_file(ns, lipid_code, temp, mdp_filename_in, mdp_filename_out, sim_type):
     # read input
     with open(mdp_filename_in, 'r') as fp:
         mdp_lines_in = fp.read().split('\n')
@@ -37,7 +37,7 @@ def print_mdp_file(ns, mdp_filename_in, mdp_filename_out, sim_type, temp=None):
                 if sim_type == 'prod':
                     sim_steps = str(round(ns.prod_sim_time * 1000 / dt))
                 elif sim_type == 'equi':
-                    sim_steps = str(round(ns.user_config['cg_time_equi'] * 1000 / dt))
+                    sim_steps = str(round(ns.user_config['cg_time_equi'][lipid_code][temp] * 1000 / dt))
                 mdp_lines_in[i] = mdp_line.replace('PLACEHOLDER', sim_steps) + '    ; automatically modified'
             if mdp_line.startswith('nstxout-compressed'):
                 xtc_write_freq = str(round(ns.cg_sampling / dt))
@@ -47,11 +47,11 @@ def print_mdp_file(ns, mdp_filename_in, mdp_filename_out, sim_type, temp=None):
             if mdp_line.startswith('ref-t') or mdp_line.startswith('ref_t'):
                 if 'PLACEHOLDER PLACEHOLDER' in mdp_line:
                     mdp_lines_in[i] = mdp_line.replace('PLACEHOLDER PLACEHOLDER',
-                                                       temp + ' ' + temp) + '    ; automatically modified'
+                                                       temp[:-1] + ' ' + temp[:-1]) + '    ; automatically modified'
                 else:
-                    mdp_lines_in[i] = mdp_line.replace('PLACEHOLDER', temp) + '    ; automatically modified'
+                    mdp_lines_in[i] = mdp_line.replace('PLACEHOLDER', temp[:-1]) + '    ; automatically modified'
             elif mdp_line.startswith('gen-temp') or mdp_line.startswith('gen_temp'):
-                mdp_lines_in[i] = mdp_line.replace('PLACEHOLDER', temp) + '    ; automatically modified'
+                mdp_lines_in[i] = mdp_line.replace('PLACEHOLDER', temp[:-1]) + '    ; automatically modified'
 
     # replace MDP file's content by the modified one
     with open(mdp_filename_out, 'w') as fp:
@@ -86,7 +86,6 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
                       str(round(score_part['cg_apl']['std'], 3)) + ')      Score adapted APL:',
                       str(round(score_part['perc_delta_apl_adapt'], 2)) + '%')
             else:
-
                 str_delta_apl = 'None'
                 str_perc_delta_apl_real = 'None'
                 str_perc_delta_apl_adapt = 'None'
@@ -114,12 +113,15 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
                       '+/-', str(round(score_part['cg_thick']['std'], 3)) + ')')
 
             # if user has specified that we make use of the simulations available for this lipid for bottom-up scoring
+            str_rdf_scoring = ""
+            if not ns.user_config['score_rdfs']:
+                str_rdf_scoring = "(absent from score aggregation)"
             if ns.user_config['reference_AA_weight'][lipid_code] > 0:
                 print(f"  Δ Geoms: {round(score_part['perc_delta_geoms'], 4)} ({round(score_part['perc_delta_geoms'], 2)} %)")
-                print(f"  Δ RDFs: {round(score_part['perc_delta_rdfs'], 4)} ({round(score_part['perc_delta_rdfs'], 2)} %)")
+                print(f"  Δ RDFs: {round(score_part['perc_delta_rdfs'], 4)} ({round(score_part['perc_delta_rdfs'], 2)} %)   {str_rdf_scoring}")
             else:
-                print(f"  Δ Geoms: Inactive")
-                print(f"  Δ RDFs: Inactive")
+                print(f"  Δ Geoms: Inactive (no ref. AA traj)")
+                print(f"  Δ RDFs: Inactive (no ref. AA traj)")
             print(f"\n  Area compressibility: {round(score_part['area_compress'], 1)} mN/m     (NOT in the score atm)\n")
 
             fp.write(str(ns.n_cycle) + ' ' + str(ns.n_swarm_iter) + ' ' + str(nb_eval_particle) + ' ' + lipid_code + ' ' + temp + ' ' + str(
@@ -292,7 +294,7 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
             fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('P4', 72))
 
         elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3REMAP':
-            fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('WN', 72))
+            fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('W', 72))
 
         elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3':
             fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('W', 72))
@@ -353,75 +355,49 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
         plt.savefig(f'{out_dir}/EPS_force_field.png')
         plt.close(fig)
 
-        # write P4 bead interactions if we are in WET + the Water ITP -- From martini_v2.2_PEO_PS_CNP.itp
-        if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI2':
-
-            fp.write('''
-
-     P4 P4     1    0.470   5.000
-     P4 Na     1    0.470   4.000
-     P4 C3     1    0.470   2.700
-     P4 C4     1    0.470   2.700
-     P4 C1     1    0.470   2.000
-     P4 Qa     1    0.470   5.600
-     P4 Q0     1    0.470   5.600
-
-;;;;;; WATER (representing 4 H2O molecules)
-
-[ moleculetype ]
-; molname   nrexcl
-  W         1
-
-[ atoms ]
-;id   type  resnr   residu  atom  cgnr  charge
-  1   P4    1       W       W     1     0 
-
-''')
-
-        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3REMAP':
+        if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3REMAP':
 
             water2beads = {
-                'Q0': '     WN Q0     1    0.470   5.070\n',
-                'Q1': '     WN Q1     1    0.470   5.610\n',
-                'N2a': '     WN N2a    1    0.470   3.700\n',
-                'C1': '     WN C1     1    0.470   2.000\n',
-                'C3': '     WN C3     1    0.470   2.340\n',
-                'SC2': '     WN SC2    1    0.441   1.520\n',
-                'SC3': '     WN SC3    1    0.440   1.740\n'
+                'Q1':   '     W Q1     1    0.465   5.220\n',
+                'Q5':   '     W Q5     1    0.465   6.340\n',
+                'N4a':  '     W N4a    1    0.465   3.500\n',
+                'SN4a': '     W SN4a   1    0.425   3.000\n',
+                'C1':   '     W C1     1    0.470   2.060\n',
+                'C4h':  '     W C4h    1    0.465   2.420\n',
+                'SC2':  '     W SC2    1    0.425   1.690\n',
+                'SC4h': '     W SC4h   1    0.425   1.800\n'
             }
 
-            fp.write('     WN WN     1    0.470   4.650\n')  # this one is always present
-
+            fp.write('     W W     1    0.470   4.650\n')  # this one is always present
             for bead_type in ns.all_beads_types:  # the other are not forcefully mandatory
                 fp.write(water2beads[bead_type])
 
             fp.write('''
 
-;;;;;; WATER (representing 4 H2O molecules)
+;;;;;; WATER (representing 4 molecules)
 
 [ moleculetype ]
 ; molname  	nrexcl
-  WN  	    	1
+  W  	    	1
 
 [ atoms ]
-;id 	type 	resnr 	residu 	atom 	cgnr 	charge
- 1 	WN  	1 	WN  	WN 	1 	0 
+;id     type    resnr   residu  atom    cgnr    charge
+ 1      W      1        W       W      1       0
 
 ''')
 
         elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3':
 
             water2beads = {
-                'Q1': '     W  Q1     1    0.465   5.220\n',
-                'Q5': '     W  Q5     1    0.465   6.340\n',
-                'N4a': '     W  N4a    1    0.465   3.500\n',
-                'C1': '     W  C1     1    0.470   2.060\n',
-                'C4h': '     W  C4h    1    0.465   2.420\n',
+                'Q1':   '     W  Q1     1    0.465   5.220\n',
+                'Q5':   '     W  Q5     1    0.465   6.340\n',
+                'N4a':  '     W  N4a    1    0.465   3.500\n',
+                'C1':   '     W  C1     1    0.470   2.060\n',
+                'C4h':  '     W  C4h    1    0.465   2.420\n',
                 'SN4a': '     W  SN4a   1    0.425   3.000\n'
             }
 
             fp.write('     W  W      1    0.470   4.650\n')  # this one is always present
-
             for bead_type in ns.all_beads_types:  # the other are not forcefully mandatory
                 fp.write(water2beads[bead_type])
 

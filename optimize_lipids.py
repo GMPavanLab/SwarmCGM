@@ -410,7 +410,7 @@ for lipid_code in ns.user_config['lipids_codes']:
 
         for temp in ns.user_config['lipids_codes'][lipid_code]:
 
-            ns.rdf_indep_weights[lipid_code][temp] = {}
+            ns.rdf_indep_weights[lipid_code][temp] = {}  # that is just initialized for later
 
             # if user has specified that we make use of the simulations available for this lipid for bottom-up scoring
             if ns.user_config['reference_AA_weight'][lipid_code] > 0:
@@ -478,11 +478,9 @@ for lipid_code in ns.user_config['lipids_codes']:
                         # find if delta should be positive or negative by checking the position of an atom of the arm, far away from the head (here atom_id +60 with respect to phosphate id)
                         ref_z_pos = aa_universe.atoms[atom_id + 60].position[2]
                         if abs(cg_z_pos - ref_z_pos) > abs(aa_z_pos - ref_z_pos):
-                            all_Dhh_deltas[ts.frame * ns.nb_mol_instances + i] = -abs(
-                                aa_z_pos - cg_z_pos) / 10  # retrieve nm
+                            all_Dhh_deltas[ts.frame * ns.nb_mol_instances + i] = -abs(aa_z_pos - cg_z_pos) / 10  # retrieve nm
                         else:
-                            all_Dhh_deltas[ts.frame * ns.nb_mol_instances + i] = abs(
-                                aa_z_pos - cg_z_pos) / 10  # retrieve nm
+                            all_Dhh_deltas[ts.frame * ns.nb_mol_instances + i] = abs(aa_z_pos - cg_z_pos) / 10  # retrieve nm
 
                 avg_Dhh_delta = np.median(all_Dhh_deltas)
                 all_avg_Dhh_delta.append(avg_Dhh_delta)
@@ -492,8 +490,7 @@ for lipid_code in ns.user_config['lipids_codes']:
                 print('\n  Calculating APL for AA data')
                 x_boxdims = []
                 for ts in aa_universe.trajectory:
-                    x_boxdims.append(ts.dimensions[
-                                         0])  # X-axis box size, Y is in principle identical and Z size is orthogonal to the bilayer
+                    x_boxdims.append(ts.dimensions[0])  # X-axis box size, Y is in principle identical and Z size is orthogonal to the bilayer
                 x_boxdims = np.array(x_boxdims)
 
                 apl_avg = round(np.mean(x_boxdims ** 2 / (ns.nb_mol_instances / 2)) / 100, 4)
@@ -511,9 +508,12 @@ for lipid_code in ns.user_config['lipids_codes']:
                 #       (anyway the impact would be very small but really, who knows ??)
 
                 # get the id of the bead that should be used as reference for Dhh calculation + the delta for Dhh calculation, if any
-                head_type = lipid_code[2:]  # TODO: when we start incorporating lipids for which the code is not 4 letters this may NOT work
+                head_type = lipid_code[2:]  # TODO: when we start incorporating lipids for which the code is not 4 letters this will NOT work
                 phosphate_atom_id = ns.user_config['phosphate_pos'][head_type]['AA']
                 phosphate_atom_id -= 1
+
+                # NOTE: this block below has been disabled because NOT working properly
+                # REQUIRES: AA trajectories for which the membrane does NOT go through Z-side PBC
 
                 # to ensure thickness calculations are not affected by bilayer being split on Z-axis PBC
                 # for each frame, calculate 2 thicknesses: 1. without changing anything AND 2. by shifting the upper half of the box below the lower half THEN 3. take minimum thickness value
@@ -539,24 +539,25 @@ for lipid_code in ns.user_config['lipids_codes']:
                     phos_z_dists_1 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
 
                     # 2. with correction
-                    for i in range(ns.nb_mol_instances):
-                        if z_all[i] > ts.dimensions[2] / 2:  # Z-axis box size
-                            z_all[i] -= ts.dimensions[2]
-                    z_avg = np.mean(
-                        z_all)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-                    z_pos, z_neg = [], []
-                    for i in range(ns.nb_mol_instances):
-                        if z_all[i] > z_avg:
-                            z_pos.append(z_all[i])
-                        else:
-                            z_neg.append(z_all[i])
-                    phos_z_dists_2 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
+                    # for i in range(ns.nb_mol_instances):
+                    #     if z_all[i] > ts.dimensions[2] / 2:  # Z-axis box size
+                    #         z_all[i] -= ts.dimensions[2]
+                    # z_avg = np.mean(
+                    #     z_all)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
+                    # z_pos, z_neg = [], []
+                    # for i in range(ns.nb_mol_instances):
+                    #     if z_all[i] > z_avg:
+                    #         z_pos.append(z_all[i])
+                    #     else:
+                    #         z_neg.append(z_all[i])
+                    # phos_z_dists_2 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
 
                     # 3. choose the appropriate thickness measurement
-                    if phos_z_dists_1 <= phos_z_dists_2:
-                        phos_z_dists.append(phos_z_dists_1)
-                    else:
-                        phos_z_dists.append(phos_z_dists_2)
+                    # if phos_z_dists_1 <= phos_z_dists_2:
+                    #     phos_z_dists.append(phos_z_dists_1)
+                    # else:
+                    #     phos_z_dists.append(phos_z_dists_2)
+                    phos_z_dists.append(phos_z_dists_1)
 
                 Dhh_avg = round(np.mean(phos_z_dists), 4)
                 Dhh_std = round(np.std(phos_z_dists), 4)
@@ -576,7 +577,7 @@ for lipid_code in ns.user_config['lipids_codes']:
                     ag1 = mda.AtomGroup(ns.cg_itp['rdf_pairs'][pair_type][0], aa2cg_universe)
                     ag2 = mda.AtomGroup(ns.cg_itp['rdf_pairs'][pair_type][1], aa2cg_universe)
 
-                    # here we ignore all pairs of beads types that are involved in bonded interactions (i.e. from the same molecule),
+                    # here we ignore all pairs of bead types that are involved in bonded interactions (i.e. from the same molecule),
                     # as this would only add noise into the scoring function
                     # note that the exclusion block is NOT the number of atoms per molecule,
                     # but the numbers of ATOMS PROVIDED PER MOLECULE in the input 2 first arguments to InterRDF
@@ -590,9 +591,8 @@ for lipid_code in ns.user_config['lipids_codes']:
                     rdf_norm = irdf_short.count / ns.vol_shell
                     rdf_count = irdf_short.count  # scale for percentage error
 
-                    # attempt to weight the independant RDF in the scoring that will come later
-                    last_id = np.where(ns.bins_vol_shell == 1.5)[0][
-                        0]  # index of the bin for which the volume is 1.5 nm
+                    # attempt to weight the independent RDF in the scoring that will come later
+                    last_id = np.where(ns.bins_vol_shell == 1.5)[0][0]  # index of the bin for which the volume is 1.5 nm
                     ns.rdf_indep_weights[lipid_code][temp][pair_type] = np.sum(rdf_count[:last_id + 1])
 
                     ns.cg_itp['rdf_' + temp + '_short'][pair_type] = rdf_count, rdf_norm
@@ -657,7 +657,7 @@ for lipid_code in ns.user_config['lipids_codes']:
         # TODO: this is just for going fast while doing the 5 and 8 beads, in the future we just discard low-resolution stuff
         #       or this will have to be provided via the config file if the objective is exclusively top-down
         # all_avg_Dhh_delta = [0.1]  # this is for the 8 beads models
-        all_avg_Dhh_delta = [0.157]  # this is for the 5 beads models
+        # all_avg_Dhh_delta = [0.157]  # this is for the 5 beads models
 
         # store some metadata
         ns.cg_itp['meta'] = {'nb_mols': ns.nb_mol_instances, 'nb_beads': ns.nb_beads_itp,
@@ -862,14 +862,13 @@ for lipid_code in ns.user_config['lipids_codes']:
     try:
         for bond_id in range(len(ns.cg_itps[lipid_code]['bond'])):
             geom_grp = ns.cg_itps[lipid_code]['bond'][bond_id]['geom_grp']
+            ns.cg_itps[lipid_code]['bond'][bond_id]['value'] = ns.user_config['init_bonded'][geom_grp]['val']
             ns.cg_itps[lipid_code]['bond'][bond_id]['fct'] = ns.user_config['init_bonded'][geom_grp]['fct']
         # print('GEOM GRP:', geom_grp, '-- BOND ID:', bond_id, '-- FCT:', ns.user_config['init_bonded'][ns.mapping_type][ns.user_config['solv']][geom_grp]['fct'])
         for angle_id in range(len(ns.cg_itps[lipid_code]['angle'])):
             geom_grp = ns.cg_itps[lipid_code]['angle'][angle_id]['geom_grp']
-            ns.cg_itps[lipid_code]['angle'][angle_id]['value'] = ns.user_config['init_bonded'][geom_grp][
-                'val']
-            ns.cg_itps[lipid_code]['angle'][angle_id]['fct'] = ns.user_config['init_bonded'][geom_grp][
-                'fct']
+            ns.cg_itps[lipid_code]['angle'][angle_id]['value'] = ns.user_config['init_bonded'][geom_grp]['val']
+            ns.cg_itps[lipid_code]['angle'][angle_id]['fct'] = ns.user_config['init_bonded'][geom_grp]['fct']
         # print('GEOM GRP:', geom_grp, '-- ANGLE ID:', angle_id, '-- FCT:', ns.user_config['init_bonded'][ns.mapping_type][ns.user_config['solv']][geom_grp]['fct'])
     except:
         sys.exit(
@@ -918,7 +917,7 @@ print('Collecting bonds and angles values from AA mapped data')
 for geom_grp in ns.all_bonds_types:
 
     # find min/max values of bonds in the geom group at all selected temperatures + average of their average value
-    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'ref': None}
+    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'ref_eq_val': None}
 
     if geom_grp in ns.user_config['tune_bonds_equi_val']:
         ns.all_params_opti.append(f'{geom_grp}_val')
@@ -927,7 +926,6 @@ for geom_grp in ns.all_bonds_types:
 
     # if user has specified that we make use of the simulations available for this lipid in the bottom-up scoring
     if ns.user_config['reference_AA_weight'][lipid_code] > 0:
-
         geom_grp_val = []
         for lipid_code in ns.all_bonds_types[geom_grp]:
             for bond_id in ns.all_bonds_types[geom_grp][lipid_code]:
@@ -938,24 +936,30 @@ for geom_grp in ns.all_bonds_types:
                     geom_grp_val.append(ns.cg_itps[lipid_code]['bond'][bond_id]['avg_' + temp])
         geom_grp_avg = round(np.mean(geom_grp_val), 3)
         geom_grp_std = round(np.std(geom_grp_val), 3)
-        ns.params_val[geom_grp]['ref'] = geom_grp_avg
     else:
         ns.params_val[geom_grp]['range'][0] = round(ns.user_config['init_bonded'][geom_grp]['val'] - ns.user_config['bond_value_guess_variation'], 3)
         ns.params_val[geom_grp]['range'][1] = round(ns.user_config['init_bonded'][geom_grp]['val'] + ns.user_config['bond_value_guess_variation'], 3)
         geom_grp_avg = 'Unknown'
         geom_grp_std = 'Unknown'
-        ns.params_val[geom_grp]['ref'] = ns.user_config['init_bonded'][geom_grp]['val']
 
-    for lipid_code in ns.all_bonds_types[geom_grp]:  # attribute starting equilibrium value to the ITP containers
-        for bond_id in ns.all_bonds_types[geom_grp][lipid_code]:
-            ns.cg_itps[lipid_code]['bond'][bond_id]['value'] = ns.params_val[geom_grp]['ref']
+    # DISABLED BLOCK BELOW SO THAT WE ALWAYS START FROM ALL THE VALUES PRESENT IN THE CONFIG FILE
+    ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
+    # by default we start from the values in the config file, and we instead start from the AA average if the parameter has to be tuned
+    # in case we have no AA reference data, then we fall back to the values in the config file
+    # if geom_grp in ns.user_config['tune_bonds_equi_val'] and geom_grp_avg != 'Unknown':
+    #     ns.params_val[geom_grp]['ref_eq_val'] = geom_grp_avg
+    #     for lipid_code in ns.all_bonds_types[geom_grp]:
+    #         for bond_id in ns.all_bonds_types[geom_grp][lipid_code]:
+    #             ns.cg_itps[lipid_code]['bond'][bond_id]['value'] = geom_grp_avg
+    # else:
+    #     ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
 
-    print(f"  {geom_grp} -- Reference: {ns.params_val[geom_grp]['ref']} -- Avg: {geom_grp_avg} -- Std: {geom_grp_std} -- Range: {ns.params_val[geom_grp]['range']}")
+    print(f"  {geom_grp} -- Used: {ns.cg_itps[lipid_code]['bond'][bond_id]['value']} -- AA Avg: {geom_grp_avg} -- AA Std: {geom_grp_std} -- Range: {ns.params_val[geom_grp]['range']}")
 
 for geom_grp in ns.all_angles_types:
 
     # find min/max values of angles in the geom group at all selected temperatures + average of their average value
-    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'ref': None}
+    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'ref_eq_val': None}
 
     if geom_grp in ns.user_config['tune_angles_equi_val']:
         ns.all_params_opti.append(f'{geom_grp}_val')
@@ -974,19 +978,25 @@ for geom_grp in ns.all_angles_types:
                     geom_grp_val.append(ns.cg_itps[lipid_code]['angle'][angle_id]['avg_' + temp])
         geom_grp_avg = round(np.mean(geom_grp_val), 1)
         geom_grp_std = round(np.std(geom_grp_val), 1)
-        ns.params_val[geom_grp]['ref'] = geom_grp_avg
     else:
         ns.params_val[geom_grp]['range'][0] = round(ns.user_config['init_bonded'][geom_grp]['val'] - ns.user_config['angle_value_guess_variation'], 1)
         ns.params_val[geom_grp]['range'][1] = round(ns.user_config['init_bonded'][geom_grp]['val'] + ns.user_config['angle_value_guess_variation'], 1)
         geom_grp_avg = 'Unknown'
         geom_grp_std = 'Unknown'
-        ns.params_val[geom_grp]['ref'] = ns.user_config['init_bonded'][geom_grp]['val']
 
-    for lipid_code in ns.all_angles_types[geom_grp]:  # attribute starting equilibrium value to the ITP containers
-        for bond_id in ns.all_angles_types[geom_grp][lipid_code]:
-            ns.cg_itps[lipid_code]['angle'][angle_id]['value'] = ns.params_val[geom_grp]['ref']
+    # DISABLED BLOCK BELOW SO THAT WE ALWAYS START FROM ALL THE VALUES PRESENT IN THE CONFIG FILE
+    ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
+    # by default we start from the values in the config file, and we instead start from the AA average if the parameter has to be tuned
+    # in case we have no AA reference data, then we fall back to the values in the config file
+    # if geom_grp in ns.user_config['tune_angles_equi_val'] and geom_grp_avg != 'Unknown':
+    #     ns.params_val[geom_grp]['ref_eq_val'] = geom_grp_avg
+    #     for lipid_code in ns.all_angles_types[geom_grp]:
+    #         for angle_id in ns.all_angles_types[geom_grp][lipid_code]:
+    #             ns.cg_itps[lipid_code]['angle'][angle_id]['value'] = geom_grp_avg
+    # else:
+    #     ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
 
-    print(f"  {geom_grp} -- Reference: {ns.params_val[geom_grp]['ref']} -- Avg: {geom_grp_avg} -- Std: {geom_grp_std} -- Range: {ns.params_val[geom_grp]['range']}")
+    print(f"  {geom_grp} -- Used: {ns.cg_itps[lipid_code]['angle'][angle_id]['value']} -- AA Avg: {geom_grp_avg} -- AA Std: {geom_grp_std} -- Range: {ns.params_val[geom_grp]['range']}")
 
 if ns.user_config['tune_radii']:
     for radii_grp in sorted(ns.user_config['tune_radii_in_groups']):

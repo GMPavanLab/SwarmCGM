@@ -25,24 +25,18 @@ def get_particle_score(ns, nb_eval_particle, swarm_res):
                 delta_rdfs_per_grp = score_parts['delta_rdfs_per_grp']  # key: pair_type then: float
 
                 for geom_grp in delta_geoms_per_grp:
+                    weighted_delta_geoms = [dgeom * ns.user_config['reference_AA_weight'][lipid_code] for dgeom in delta_geoms_per_grp[geom_grp]]
                     if geom_grp not in all_delta_geoms_per_grp:
-                        all_delta_geoms_per_grp[geom_grp] = delta_geoms_per_grp[geom_grp].copy()
+                        all_delta_geoms_per_grp[geom_grp] = weighted_delta_geoms
                     else:
-                        all_delta_geoms_per_grp[geom_grp].extend(delta_geoms_per_grp[geom_grp])
-
-                for geom_grp in all_delta_geoms_per_grp:  # apply the error tolerance for unreliable AA trajs (down-weighting)
-                    for i in range(len(all_delta_geoms_per_grp[geom_grp])):
-                        all_delta_geoms_per_grp[geom_grp][i] *= ns.user_config['reference_AA_weight'][lipid_code]
+                        all_delta_geoms_per_grp[geom_grp].extend(weighted_delta_geoms)
 
                 for pair_type in delta_rdfs_per_grp:
+                    weighted_delta_rdf = delta_rdfs_per_grp[pair_type] * ns.user_config['reference_AA_weight'][lipid_code]
                     if pair_type not in all_delta_rdfs_per_grp:
-                        all_delta_rdfs_per_grp[pair_type] = [delta_rdfs_per_grp[pair_type]]
+                        all_delta_rdfs_per_grp[pair_type] = [weighted_delta_rdf]
                     else:
-                        all_delta_rdfs_per_grp[pair_type].append(delta_rdfs_per_grp[pair_type])
-
-                for pair_type in all_delta_rdfs_per_grp:
-                    for i in range(len(all_delta_rdfs_per_grp[pair_type])):
-                        all_delta_rdfs_per_grp[pair_type][i] *= ns.user_config['reference_AA_weight'][lipid_code]
+                        all_delta_rdfs_per_grp[pair_type].append(weighted_delta_rdf)
 
             # if ns.user_config['exp_data'][lipid_code][temp]['apl'] is not None:
             part_apls += score_parts['perc_delta_apl_adapt'] ** 2
@@ -63,7 +57,10 @@ def get_particle_score(ns, nb_eval_particle, swarm_res):
             all_delta_rdfs_per_grp[pair_type] = np.sqrt(np.sum([delta_rdf ** 2 for delta_rdf in all_delta_rdfs_per_grp[pair_type]]) / len(all_delta_rdfs_per_grp[pair_type]))
         part_rdfs = np.sqrt(np.sum([all_delta_rdfs_per_grp[pair_type] ** 2 for pair_type in all_delta_rdfs_per_grp]) / len(all_delta_rdfs_per_grp))
 
-        particle_score = np.sqrt((part_geoms ** 2 + part_rdfs ** 2 + part_apls ** 2 + part_dhhs ** 2) / 4)
+        if ns.user_config['score_rdfs']:
+            particle_score = np.sqrt((part_geoms ** 2 + part_rdfs ** 2 + part_apls ** 2 + part_dhhs ** 2) / 4)
+        else:
+            particle_score = np.sqrt((part_geoms ** 2 + part_apls ** 2 + part_dhhs ** 2) / 3)
 
     else:  # make use exclusively of top-down component
         particle_score = np.sqrt((part_apls ** 2 + part_dhhs ** 2) / 2)

@@ -588,12 +588,12 @@ def get_initial_guess_list(ns):
 		param_short = param.split('_')[0]
 
 		if param.startswith('B') and param.endswith('val'):
-			input_guess.append(ns.params_val[param_short]['ref'])
+			input_guess.append(ns.params_val[param_short]['ref_eq_val'])
 		elif param.startswith('B') and param.endswith('fct'):
 			input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
 
 		elif param.startswith('A') and param.endswith('val'):
-			input_guess.append(ns.params_val[param_short]['ref'])
+			input_guess.append(ns.params_val[param_short]['ref_eq_val'])
 		elif param.startswith('A') and param.endswith('fct'):
 			input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
 
@@ -622,8 +622,8 @@ def get_initial_guess_list(ns):
 
 			# bonds, tune both value and force constants
 			if param.startswith('B') and param.endswith('val'):
-				draw_low = max(ns.params_val[param_short]['ref'] - ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][0])
-				draw_high = min(ns.params_val[param_short]['ref'] + ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				draw_low = max(ns.params_val[param_short]['ref_eq_val'] - ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][0])
+				draw_high = min(ns.params_val[param_short]['ref_eq_val'] + ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][1])
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 			elif param.startswith('B') and param.endswith('fct'):
 				draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['bond_fct_guess_variation'], ns.user_config['min_fct_bonds'])
@@ -631,8 +631,8 @@ def get_initial_guess_list(ns):
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 
 			elif param.startswith('A') and param.endswith('val'):
-				draw_low = max(ns.params_val[param_short]['ref'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][0])
-				draw_high = min(ns.params_val[param_short]['ref'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				draw_low = max(ns.params_val[param_short]['ref_eq_val'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][0])
+				draw_high = min(ns.params_val[param_short]['ref_eq_val'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][1])
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 			elif param.startswith('A') and param.endswith('fct'):
 				draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['angle_fct_guess_variation'], ns.user_config['min_fct_angles'])
@@ -762,7 +762,7 @@ def map_aa2cg_traj(ns, aa_universe, aa2cg_universe, mda_beads_atom_grps, mda_wei
 			traj = np.empty((len(aa_universe.trajectory), 3))
 			for ts in aa_universe.trajectory:
 				traj[ts.frame] = mda_beads_atom_grps[bead_id].center(
-					mda_weights_atom_grps[bead_id], pbc=None, compound='group'
+					mda_weights_atom_grps[bead_id], compound='group'
 				)  # no need for PBC handling, trajectories were made wholes for the molecule
 			
 			coord[:, bead_id, :] = traj

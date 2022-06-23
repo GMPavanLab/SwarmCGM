@@ -4,8 +4,8 @@ exec_folder: ""  # string, empty = new directory named after timestamp, filled =
 nb_particles: 3  # 'auto' or integer, size of the swarm of particles
 
 # 2. REFERENCE ALL-ATOM (AA) DATA USED FOR THE BOTTOM-UP COMPONENT OF THE SCORE
-mapping_type: MARTINI3REMAP  # string, your mapping/framework type (defines where input files will be searched for)
-solv: WET  # WET or DRY, for explicit or implicit solvent (defines where input files will be searched for)
+mapping_type: 8BEADS  # string, your mapping/framework type (defines where input files will be searched for)
+solv: DRY  # WET or DRY, for explicit or implicit solvent (defines where input files will be searched for)
 lipids_codes:  # lipids and temperatures to use for this optimization (other input files must be prepared accordingly)
   POPC: [303K]
   DOPC: [303K]
@@ -17,49 +17,54 @@ phosphate_pos:  # position of the phosphate atom or bead, used for calculating D
     CG: 2  # bead id of the bead containing the phosphate, 1-indexed
 
 # 3. CONDITIONS OF THE OPTIMIZATION: CHOICE OF THE PARAMETERS TO BE OPTIMIZED
-cg_time_equi: 3  # ns, CG MD equilibration time
+cg_time_equi:  # ns, CG MD equilibration time
+  POPC:
+    303K: 3
+  DOPC:
+    303K: 3
 cg_time_prod: 20  # ns, CG MD production time
 tune_bonds_equi_val: all  # 'all' or list of bond types for which equilibrium values will be optimized or empty list
 tune_bonds_fct: all  # 'all' or list of bond types for which force constants will be optimized or empty list
-tune_angles_equi_val: [A2, A3, A4, A5, A6, A7, A8, A9, A10, A20, A21, A22]  # 'all' or list of angle types for which equilibrium values will be optimized or empty list
+tune_angles_equi_val: all  # 'all' or list of angle types for which equilibrium values will be optimized or empty list
 tune_angles_fct: all  # 'all' or list of angle types for which force constants will be optimized or empty list
-tune_radii: False  # True or False, for tuning all radii for beads listed in 'init_beads_radii' (LJ sigma will be the sum of 2 radii for a pair of bead types)
+tune_radii: True  # True or False, for tuning all radii for beads listed in 'init_beads_radii' (LJ sigma will be the sum of 2 radii for a pair of bead types)
 tune_radii_in_groups: None  # bead radii can be tuned in groups, using the same radii for several types of beads
-tune_epsilons: True
+tune_epsilons: all  # 'all' or list of pairs of bead types for which the LJ epsilon interaction will be tuned, or empty list
+score_rdfs: True  # boolean, for including RDFs in the score (RDFs will be measured and plotted even if ignored in the score)
 
 # 4. CONDITIONS OF THE OPTIMIZATION: RANGES OF THE PARAMETERS TO BE OPTIMIZED, THAT ARE ALLOWED TO BE EXPLORED
-min_radius: 0.12  # nm, minimum bead radius
-max_radius: 0.35  # nm, maximum bead radius
+min_radius: 0.23  # nm, minimum bead radius
+max_radius: 0.38  # nm, maximum bead radius
 min_epsilon: 0.10  # kJ.mol-1, minimum LJ epsilon value
 max_epsilon: 8.00  # kJ.mol-1, maximum LJ epsilon value
 min_max_epsilon_relative_range: None  # float or None, limit the allowed range of LJ epsilons value around (+/-) the value given in 'init_nonbonded'
-min_fct_bonds: 1000  # fct units
-max_fct_bonds: 9000  # fct units
+min_fct_bonds: 100  # fct units
+max_fct_bonds: 3500  # fct units
 min_fct_angles: 0  # fct units
-max_fct_angles: 70  # fct units
+max_fct_angles: 200  # fct units
 apl_base_perc_error: 10
 dhh_base_perc_error: 10
-apl_cap_perc_error: 30
-dhh_cap_perc_error: 30
+apl_cap_perc_error: 40
+dhh_cap_perc_error: 40
 
 # 5. INITIALIZATION OF THE SWARM OF PARTICLES: AMPLITUDE OF THE VARIATIONS CREATED RANDOMLY AROUND THE STARTING FF PARAMETERS
 #    (i.e. DEFINES +/- RANGES FOR RANDOM VARIATIONS AROUND VALUES IN 'init_bonded', 'init_nonbonded' and 'init_beads_radii')
 bond_value_guess_variation: 0.02  # nm, defines also the allowed parameter search range in top-down calibration of bonds equilibrium values
 angle_value_guess_variation: 20  # degrees, defines also the allowed parameter search range in top-down calibration of angles equilibrium values
-bond_fct_guess_variation: 3000  # fct units
-angle_fct_guess_variation: 15  # fct units
+bond_fct_guess_variation: 1500  # fct units
+angle_fct_guess_variation: 100  # fct units
 radius_guess_variation: 0.10  # nm
-epsilon_guess_variation: 4  # kJ.mol-1
+epsilon_guess_variation: 3  # kJ.mol-1
 
 # 6. PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: GENERAL
-nb_cores_analysis: 8  # number of cores to use for analysis on the machine or node running the optimisation software
+nb_cores_analysis: 8  # number of cores to use for analysis on the machine or node running the optimization software
 gmx_mini_additional_args_str: ""  # string, additional arguments to be appended to the GROMACS command line for the minimization step
 gmx_equi_additional_args_str: ""  # string, additional arguments to be appended to the GROMACS command line for the equilibration step
 gmx_prod_additional_args_str: ""  # string, additional arguments to be appended to the GROMACS command line for the production step
 
 # 7. PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: SPECIFIC TO HPC RESOURCE (SLURM ONLY)
 master_job_name: "MASTER"  # name of the master job
-nb_hpc_slots: 0  # max number of nodes to be used at a single time
+nb_hpc_slots: 0  # max number of nodes to be used at a single time, SETTING TO 0 DISABLES HPC MODE
 
 # 8. PARAMETERS FOR RUNNING OPTIMIZATION SIMULATIONS: SPECIFIC TO A LOCAL COMPUTER
 nb_threads: "4 4"  # string, space-separated number of OpenMP threads to use, defining the number of slots for simulations
@@ -68,95 +73,73 @@ gmx_gpu_cancel_str: "-nb cpu"  # string, will be added to GROMACS commands for t
 
 # 9. INITIAL FORCE FIELD PARAMETERS FOR BONDED TERMS
 init_bonded:  # must correspond to bond and angle types as defined in your input ITP files
-  B1: { val: 0, fct: 3000 }  # Bonds
-  B2: { val: 0, fct: 3000 }  # nm, kJ.mol-1.nm-2
-  B3: { val: 0, fct: 3000 }
-  B4: { val: 0, fct: 3000 }
-  B5: { val: 0, fct: 3000 }
-  B6: { val: 0, fct: 3000 }
-  B7: { val: 0, fct: 3000 }
-  B8: { val: 0, fct: 3000 }
-  B9: { val: 0, fct: 3000 }
-  B10: { val: 0, fct: 3000 }
-  B11: { val: 0, fct: 3000 }
-  B12: { val: 0, fct: 3000 }
-  B13: { val: 0, fct: 3000 }
-  B14: { val: 0, fct: 3000 }
-  A1: { val: 180, fct: 15 }  # Angles
-  A2: { val: 0, fct: 15 }  # degrees, kJ.mol-1
-  A3: { val: 0, fct: 15 }
-  A4: { val: 0, fct: 15 }
-  A5: { val: 0, fct: 15 }
-  A6: { val: 0, fct: 15 }
-  A7: { val: 0, fct: 15 }
-  A8: { val: 0, fct: 15 }
-  A9: { val: 0, fct: 15 }
-  A10: { val: 0, fct: 15 }
-  A11: { val: 0, fct: 15 }
-  A12: { val: 0, fct: 15 }
-  A13: { val: 0, fct: 15 }
-  A14: { val: 0, fct: 15 }
-  A15: { val: 0, fct: 15 }
-  A16: { val: 0, fct: 15 }
-  A17: { val: 0, fct: 15 }
-  A18: { val: 0, fct: 15 }
-  A19: { val: 0, fct: 15 }
-  A20: { val: 0, fct: 15 }
-  A21: { val: 0, fct: 15 }
-  A22: { val: 0, fct: 15 }
-  A23: { val: 0, fct: 15 }
-  A24: { val: 0, fct: 15 }
+  B1: { val: 0, fct: 1250 }  # Bonds
+  B2: { val: 0, fct: 1250 }  # nm, kJ.mol-1.nm-2
+  B3: { val: 0, fct: 1250 }
+  B4: { val: 0, fct: 1250 }
+  B5: { val: 0, fct: 1250 }
+  B6: { val: 0, fct: 1250 }
+  B7: { val: 0, fct: 1250 }
+  B8: { val: 0, fct: 1250 }
+  B10: { val: 0, fct: 1250 }
+  B11: { val: 0, fct: 1250 }
+  A1: { val: 0, fct: 50 }  # Angles
+  A2: { val: 0, fct: 50 }  # degrees, kJ.mol-1
+  A3: { val: 0, fct: 50 }
+  A4: { val: 0, fct: 50 }
+  A5: { val: 0, fct: 50 }
+  A6: { val: 0, fct: 50 }
+  A7: { val: 0, fct: 50 }
+  A8: { val: 0, fct: 50 }
+  A9: { val: 0, fct: 50 }
+  A10: { val: 0, fct: 50 }
+  A11: { val: 0, fct: 50 }
+  A12: { val: 0, fct: 50 }
+  A13: { val: 0, fct: 50 }
+  A14: { val: 0, fct: 50 }
+  A15: { val: 0, fct: 50 }
 
 # 10. INITIAL FORCE FIELD PARAMETERS FOR NON-BONDED TERMS
 init_nonbonded:  # must correspond to bead types as defined in your input ITP files
-  C1 C1: { sig: 0.470, eps: 3.000 }  # each pair of bead types must be sorted alphanumerically
-  C1 C3: { sig: 0.470, eps: 3.000 }  # nm, kJ.mol-1
-  C1 N2a: { sig: 0.470, eps: 3.000 }
-  C1 Q0: { sig: 0.470, eps: 3.000 }
-  C1 Q1: { sig: 0.470, eps: 3.000 }
-  C1 SC2: { sig: 0.440, eps: 3.000 }
-  C1 SC3: { sig: 0.440, eps: 3.000 }
-  C3 C3: { sig: 0.470, eps: 3.000 }
-  C3 N2a: { sig: 0.470, eps: 3.000 }
-  C3 Q0: { sig: 0.470, eps: 3.000 }
-  C3 Q1: { sig: 0.470, eps: 3.000 }
-  C3 SC2: { sig: 0.440, eps: 3.000 }
-  C3 SC3: { sig: 0.440, eps: 3.000 }
-  N2a N2a: { sig: 0.470, eps: 3.000 }
-  N2a Q0: { sig: 0.470, eps: 3.000 }
-  N2a Q1: { sig: 0.470, eps: 3.000 }
-  N2a SC2: { sig: 0.440, eps: 3.000 }
-  N2a SC3: { sig: 0.440, eps: 3.000 }
-  Q0 Q0: { sig: 0.470, eps: 3.000 }
-  Q0 Q1: { sig: 0.470, eps: 3.000 }
-  Q0 SC2: { sig: 0.440, eps: 3.000 }
-  Q0 SC3: { sig: 0.440, eps: 3.000 }
-  Q1 Q1: { sig: 0.470, eps: 3.000 }
-  Q1 SC2: { sig: 0.440, eps: 3.000 }
-  Q1 SC3: { sig: 0.440, eps: 3.000 }
-  SC2 SC2: { sig: 0.430, eps: 3.000 }
-  SC2 SC3: { sig: 0.430, eps: 3.000 }
-  SC3 SC3: { sig: 0.430, eps: 3.000 }
+  K0 K0: { sig: 0.600, eps: 4.0000 }  # each pair of bead types must be sorted alphanumerically
+  K0 K1: { sig: 0.600, eps: 4.0000 }  # nm, kJ.mol-1
+  K0 MB: { sig: 0.500, eps: 4.0000 }
+  K0 MS: { sig: 0.500, eps: 4.0000 }
+  K0 SB: { sig: 0.500, eps: 4.0000 }
+  K0 UB: { sig: 0.500, eps: 4.0000 }
+  K1 K1: { sig: 0.600, eps: 4.0000 }
+  K1 MB: { sig: 0.500, eps: 4.0000 }
+  K1 MS: { sig: 0.500, eps: 4.0000 }
+  K1 SB: { sig: 0.500, eps: 4.0000 }
+  K1 UB: { sig: 0.500, eps: 4.0000 }
+  MB MB: { sig: 0.500, eps: 4.0000 }
+  MB MS: { sig: 0.500, eps: 4.0000 }
+  MB SB: { sig: 0.500, eps: 4.0000 }
+  MB UB: { sig: 0.500, eps: 4.0000 }
+  MS MS: { sig: 0.500, eps: 4.0000 }
+  MS SB: { sig: 0.500, eps: 4.0000 }
+  MS UB: { sig: 0.500, eps: 4.0000 }
+  SB SB: { sig: 0.500, eps: 4.0000 }
+  SB UB: { sig: 0.500, eps: 4.0000 }
+  UB UB: { sig: 0.500, eps: 4.0000 }
 
 # 11. RADII OF THE CG BEADS
 init_beads_radii:
-  Q0: 0  # nm
-  Q1: 0
-  N2a: 0
-  C1: 0
-  C3: 0
-  SC2: 0
-  SC3: 0
+  MB: 0.25  # nm
+  MS: 0.25
+  UB: 0.25
+  SB: 0.25
+  K0: 0.30
+  K1: 0.30
 
 # 12. MASSES OF THE CG BEADS
 beads_masses:
-  Q0: 72  # u.m.a.
-  Q1: 72
-  N2a: 72
-  C1: 72
-  C3: 72
-  SC2: 45
-  SC3: 45
+  K0: 87  # u.m.a.
+  K1: 136
+  MB: 114
+  MS: 86
+  UB: 82
+  SB: 85
 
 # 13. PARAMETERS FOR THE ANALYSIS OF THE BOTTOM-UP COMPONENT OF THE SCORE
 bw_constraints: 0.002  # nm
@@ -175,9 +158,10 @@ exp_data:
   POPC:
     303K: { apl: 0.643, Dhh: 3.65 }  # nm2, nm
   DOPC:
-    303K: { apl: 0.674, Dhh: 3.68 }
+    303K: { apl: 0.674, Dhh: 3.67 }
   DPPC:
-    323K: { apl: 0.631, Dhh: 3.86 }
+    293K: { apl: 0.473, Dhh: 4.53 }
+    323K: { apl: 0.631, Dhh: 3.84 }
   DMPC:
     303K: { apl: 0.598, Dhh: 3.49 }
   DLPC:
@@ -194,11 +178,12 @@ reference_AA_weight:  # setting value to 0 will disable the usage of the bottom-
   DPPC: 1.0
   DMPC: 1.0
   DLPC: 1.0
-  SDPC: 0.5
-  PDPC: 0.5
+  SDPC: 0.75
+  PDPC: 0.75
+  DSPC: 0
 
 # 16. OTHERS PARAMETERS (SHOULD NOT NEED CHANGES)
-sim_kill_delay: 45  # number of seconds after which a simulation will be killed if it did not write in its log file
+sim_kill_delay: 60  # number of seconds after which a simulation will be killed if it did not write in its log file
 bonds2angles_scoring_factor: 500
 next_cycle: False  # for restarting from the single best set of FF parameters in a previous optimization output directory
 row_x_scaling: True  # use the same scale on all X axes for bond and angle distribution plots

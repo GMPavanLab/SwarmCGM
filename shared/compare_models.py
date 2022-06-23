@@ -77,10 +77,8 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
     plt.rcParams['grid.linestyle'] = ':'
     plt.rcParams['grid.linewidth'] = 0.5
 
-    cg_map_itp = ns.cg_itps[
-        lipid_code]  # access FROM THERE ONLY the stored AA mapped CG ITP for which we have geoms distributions already
-    cg_iter_itp = {'geoms': {'constraint': {}, 'bond': {}, 'angle': {}}, 'rdfs_short': {},
-                   'rdfs_long': {}}  # create storage for CG data from current iteration
+    cg_map_itp = ns.cg_itps[lipid_code]  # access FROM THERE ONLY the stored AA mapped CG ITP for which we have geoms distributions already
+    cg_iter_itp = {'geoms': {'constraint': {}, 'bond': {}, 'angle': {}}, 'rdfs_short': {}, 'rdfs_long': {}}  # create storage for CG data from current iteration
     updated_cg_itp = updated_cg_itps[lipid_code]  # contains the parameters for the current eval
 
     # read CG traj of current simulation
@@ -90,17 +88,14 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
     for _ in cg_iter_universe.trajectory:
         # make each lipid whole
         for i in range(cg_map_itp['meta']['nb_mols']):
-            cg_mol = mda.AtomGroup(
-                [i * cg_map_itp['meta']['nb_beads'] + bead_id for bead_id in range(cg_map_itp['meta']['nb_beads'])],
-                cg_iter_universe)
+            cg_mol = mda.AtomGroup([i * cg_map_itp['meta']['nb_beads'] + bead_id for bead_id in range(cg_map_itp['meta']['nb_beads'])], cg_iter_universe)
             mda.lib.mdamath.make_whole(cg_mol, inplace=True)
 
     # 1. get APL
     # get dimensions of the box at each timestep to calculate CG APL
     x_boxdims = []
     for ts in cg_iter_universe.trajectory:
-        x_boxdims.append(
-            ts.dimensions[0])  # X-axis box size, Y is in principle identical and Z size is orthogonal to the bilayer
+        x_boxdims.append(ts.dimensions[0])  # X-axis box size, Y is in principle identical and Z size is orthogonal to the bilayer
     x_boxdims = np.array(x_boxdims)
 
     cg_iter_itp['apl'] = {'avg': round(np.mean(x_boxdims ** 2 / (cg_map_itp['meta']['nb_mols'] / 2)) / 100, 4),
@@ -114,137 +109,60 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
 
     # get the id of the bead that should be used as reference for Dhh calculation + the delta for Dhh calculation, if any
     head_type = lipid_code[2:]  # NOTE: when we start incorporating lipids for which the code is not 4 letters this won't hold
-    phosphate_bead_id = int(ns.user_config['phosphate_pos'][head_type]['CG']) - 1
+    phosphate_bead_id = int(ns.user_config['phosphate_pos'][head_type]['CG'])
 
     # to ensure thickness calculations are not affected by bilayer being split on Z-axis PBC
-    # for each frame, calculate 7 thicknesses:
-    # -- 1. without changing anything
-    # -- 2. by shifting the upper half of the box below the lower half
-    # -- 3. by shifting the upper third of the box below the lower 2 other thirds
-    # -- 4. by shifting the upper quarter of the box below the lower 3 other quarters
-    # -- 5. by shifting the lower half of the box over the upper half
-    # -- 6. by shifting the lower third of the box over the upper 2 other thirds
-    # -- 7. by shifting the lower quarter of the box over the upper 3 other quarters
-    # (the 3-7. were added for WET because shifting only half causes problems for ~ small boxes, but we don't want to increase box size, to limit computation time)
-    # then we select the minimum thickness value among those 4 definitions, so this in principle is very robust to any box sizes
-
+    # for each frame, we check that the maximum Z distance between 2 beads does NOT approach the size of the
+    # Z-side of the simulation box (using some margin)
     phos_z_dists = []
+    max_thickness_margin = 10  # amgstrom, used both as margin + to shift the Z positions along Z until the membrane is not split through PBC anymore
+    max_nb_shifts_exceeded = False  # track if we had issues with Z-axis membrane shifting during Dhh calculation
 
     for ts in cg_iter_universe.trajectory:
+        # collect all beads positions
+        # NOTE: we cannot use only the phosphates, here it's important to use ALL the beads of the membrane (so excluding only solvent)
+        z_all_membrane = cg_iter_universe.atoms[:cg_map_itp['meta']['nb_mols']*cg_map_itp['meta']['nb_beads']].positions[:, 2].copy()
+        for i in range(len(z_all_membrane)):  # wrap
+            if z_all_membrane[i] < 0:
+                z_all_membrane[i] += ts.dimensions[2]
+            elif z_all_membrane[i] > ts.dimensions[2]:
+                z_all_membrane[i] -= ts.dimensions[2]
 
-        z_all = np.empty(cg_map_itp['meta']['nb_mols'])
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            id_phos = i * cg_map_itp['meta']['nb_beads'] + phosphate_bead_id
-            z_phos = cg_iter_universe.atoms[id_phos].position[2]
-            z_all[i] = z_phos
+        max_thickness = np.ptp(z_all_membrane)
+        max_nb_shifts_remaining = 10  # this is just for security, in case we could shift infinitely if the box collapses too much because of bad FF parameters
+        while max_thickness > (ts.dimensions[2] - max_thickness_margin) and max_nb_shifts_remaining > 0:
+            for i in range(len(z_all_membrane)):  # shift the membrane along Z + wrap
+                z_all_membrane[i] += max_thickness_margin
+                if z_all_membrane[i] > ts.dimensions[2]:
+                    z_all_membrane[i] -= ts.dimensions[2]
+            max_thickness = np.ptp(z_all_membrane)
+            max_nb_shifts_remaining -= 1
 
-        # 1. without correction
-        z_avg = np.mean(z_all)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-        z_pos, z_neg = [], []
+        if max_nb_shifts_remaining == 0:
+            max_nb_shifts_exceeded = True
+
+        # collect all Z-positions of phosphates
+        z_all_phos = np.empty(cg_map_itp['meta']['nb_mols'])
         for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all[i] > z_avg:
-                z_pos.append(z_all[i])
+            id_phos = i * cg_map_itp['meta']['nb_beads'] + phosphate_bead_id - 1
+            z_all_phos[i] = z_all_membrane[id_phos]
+
+        # now get the Dhh thickness
+        phos_z_avg = np.mean(z_all_phos)  # get average Z position, used as the threshold to define upper and lower phosphates' Z
+        all_phos_z_pos, all_phos_z_neg = [], []
+        for z_position in z_all_phos:
+            if z_position > phos_z_avg:
+                all_phos_z_pos.append(z_position)
             else:
-                z_neg.append(z_all[i])
-        phos_z_dists_1 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
+                all_phos_z_neg.append(z_position)
+        phos_z_dists_frame = (np.mean(all_phos_z_pos) - np.mean(all_phos_z_neg)) / 10  # retrieve nm
 
-        # 2. with correction (half upper)
-        z_all_corr = z_all.copy()
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > ts.dimensions[2] / 2:  # Z-axis box size
-                z_all_corr[i] -= ts.dimensions[2]
-        z_avg = np.mean(
-            z_all_corr)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-        z_pos, z_neg = [], []
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > z_avg:
-                z_pos.append(z_all_corr[i])
-            else:
-                z_neg.append(z_all_corr[i])
-        phos_z_dists_2 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
+        # add the Dhh thickness delta between real atom position and the center of the CG bead, that is due to the resolution employed
+        phos_z_dists.append(phos_z_dists_frame + 2 * cg_map_itp['meta']['delta_Dhh'])
 
-        # 3. with correction (third upper)
-        z_all_corr = z_all.copy()
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > ts.dimensions[2] * 2 / 3:  # Z-axis box size
-                z_all_corr[i] -= ts.dimensions[2]
-        z_avg = np.mean(
-            z_all_corr)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-        z_pos, z_neg = [], []
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > z_avg:
-                z_pos.append(z_all_corr[i])
-            else:
-                z_neg.append(z_all_corr[i])
-        phos_z_dists_3 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
-
-        # 4. with correction (quarter upper)
-        z_all_corr = z_all.copy()
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > ts.dimensions[2] * 3 / 4:  # Z-axis box size
-                z_all_corr[i] -= ts.dimensions[2]
-        z_avg = np.mean(
-            z_all_corr)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-        z_pos, z_neg = [], []
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > z_avg:
-                z_pos.append(z_all_corr[i])
-            else:
-                z_neg.append(z_all_corr[i])
-        phos_z_dists_4 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
-
-        # 5. with correction (half lower)
-        z_all_corr = z_all.copy()
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] < ts.dimensions[2] / 2:  # Z-axis box size
-                z_all_corr[i] += ts.dimensions[2]
-        z_avg = np.mean(
-            z_all_corr)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-        z_pos, z_neg = [], []
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > z_avg:
-                z_pos.append(z_all_corr[i])
-            else:
-                z_neg.append(z_all_corr[i])
-        phos_z_dists_5 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
-
-        # 6. with correction (third lower)
-        z_all_corr = z_all.copy()
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] < ts.dimensions[2] * 1 / 3:  # Z-axis box size
-                z_all_corr[i] += ts.dimensions[2]
-        z_avg = np.mean(
-            z_all_corr)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-        z_pos, z_neg = [], []
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > z_avg:
-                z_pos.append(z_all_corr[i])
-            else:
-                z_neg.append(z_all_corr[i])
-        phos_z_dists_6 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
-
-        # 7. with correction (quarter lower)
-        z_all_corr = z_all.copy()
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] < ts.dimensions[2] * 1 / 4:  # Z-axis box size
-                z_all_corr[i] += ts.dimensions[2]
-        z_avg = np.mean(
-            z_all_corr)  # get average Z position, used as the threshold to define upper and lower phopshates' Z
-        z_pos, z_neg = [], []
-        for i in range(cg_map_itp['meta']['nb_mols']):
-            if z_all_corr[i] > z_avg:
-                z_pos.append(z_all_corr[i])
-            else:
-                z_neg.append(z_all_corr[i])
-        phos_z_dists_7 = (np.mean(z_pos) - np.mean(z_neg)) / 10  # retrieve nm
-
-        # 3. choose the appropriate thickness measurement
-        phos_z_dists.append(
-            min(phos_z_dists_1, phos_z_dists_2, phos_z_dists_3, phos_z_dists_4, phos_z_dists_5, phos_z_dists_6,
-                phos_z_dists_7) + 2 * cg_map_itp['meta']['delta_Dhh'])
-
-    cg_iter_itp['Dhh'] = {'avg': round(np.mean(phos_z_dists), 4), 'med': round(np.median(phos_z_dists), 4),
-                          'std': round(np.std(phos_z_dists), 4)}  # nm
+    if max_nb_shifts_exceeded:
+        print(f"\nWARNING: During Dhh calculation for {lipid_code} {temp}, membrane was shifted the maximum amount of times authorized along the Z-axis. This either means:\n  1. the bilayer 'exploded' due to still (very) suboptimal FF parameters\n  2. the bilayer could see itself through Z-side PBC, you might not have enough water in the system\nThis warning is nothing to worry about at the start of an opti, but it should not appear anymore after a few swarm iterations and never again when approaching convergence")
+    cg_iter_itp['Dhh'] = {'avg': round(np.mean(phos_z_dists), 4), 'med': round(np.median(phos_z_dists), 4), 'std': round(np.std(phos_z_dists), 4)}  # nm
 
     # 3. get geoms distributions
     geoms_start = datetime.now().timestamp()
