@@ -169,7 +169,7 @@ def eval_function_parallel_swarm(parameters_sets, args):
                 # TODO: when doing something else than lipids+temp we need to adapt these jobs names
                 # NOTE: the master job name must stay included in variable 'job_name' below, so there is not mix-up
                 #       if 2 masters are running on the same HPC or SUPSI machine
-                job_name = f"{ns.master_job_name}_{nb_eval_particle}_{lipid_code}_{temp}"
+                job_name = f"{ns.user_config['master_job_name']}_{nb_eval_particle}_{lipid_code}_{temp}"
                 job_exec_dir = f"{ns.user_config['exec_folder']}/{config.iteration_sim_files_dirname}{nb_eval_particle}/{lipid_code}_{temp}"
 
                 jobs[job_name] = {'job_exec_dir': job_exec_dir}
@@ -202,10 +202,10 @@ def eval_function_parallel_swarm(parameters_sets, args):
         hpc_username = 'cempereu'
         slurm_single_job_args = {
             'sbatch': {
-                'account': 's1027',  # this HAS to be provided (CSCS account for billing the node hours)
-                'time': '00:55:00',  # this HAS to be format: '00:30:00' for a 30 min job
+                'account': 's1125',  # this HAS to be provided (CSCS account for billing the node hours)
+                'time': '00:25:00',  # this HAS to be format: '00:30:00' for a 30 min job
                 'nodes': 1,  # number of nodes requested for a given job
-                'ntasks-per-node': 4,  # number of MPI ranks
+                'ntasks-per-node': 12,  # number of MPI ranks
                 'cpus-per-task': 1,
                 'partition': 'normal',  # normal / low / debug (debug still bills the account, it just has a higher priority)
                 'constraint': 'gpu',  # potential specific request about architecture
@@ -218,11 +218,11 @@ def eval_function_parallel_swarm(parameters_sets, args):
         hpc_jobs = HPCJobs(hpc_username, jobs, ns.user_config['nb_hpc_slots'], slurm_single_job_args, gmx_path=ns.user_config['gmx_path'])
 
         # check how much exec time is remaining on the Master execution and verify we can run a full SWARM iteration
-        ns.master_job_id, ts_master_elapsed, ts_master_total = hpc_jobs.get_master_time(master_job_name=ns.master_job_name)
+        ns.master_job_id, ts_master_elapsed, ts_master_total = hpc_jobs.get_master_time(master_job_name=ns.user_config['master_job_name'])
         delta_ts_master_remaining = ts_master_total - ts_master_elapsed
         # 50% margin because we do NOT know at which speed future jobs will enter the SLURM queue
         # 0% margin if we run on the long queue because we hardly will have the last iter being worst than the worst of 7 days
-        time_margin = 0.5
+        time_margin = 0.00
         ts_master_elapsed_h = round(ts_master_elapsed / (60 * 60), 3)
         ts_master_total_h = round(ts_master_total / (60 * 60), 3)
         ts_master_total_time_perc = round(ts_master_elapsed / ts_master_total * 100, 2)

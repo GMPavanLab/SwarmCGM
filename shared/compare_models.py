@@ -69,7 +69,7 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
     # find if user has specified that we make use of the simulations available for this lipid
     # in the bottom-up component of the score
     bottom_up_active = False
-    if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+    if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
         bottom_up_active = True
 
     # graphical parameters
@@ -108,7 +108,7 @@ def compare_models_lipids(ns, lipid_code, temp, updated_cg_itps, tpr_file='prod.
     #       (anyway the impact would be very small but really, who knows ??)
 
     # get the id of the bead that should be used as reference for Dhh calculation + the delta for Dhh calculation, if any
-    head_type = lipid_code[2:]  # NOTE: when we start incorporating lipids for which the code is not 4 letters this won't hold
+    head_type = lipid_code[-2:]  # TODO: better robustness, currently picking the 2 last letters to identify head type
     phosphate_bead_id = int(ns.user_config['phosphate_pos'][head_type]['CG'])
 
     # to ensure thickness calculations are not affected by bilayer being split on Z-axis PBC

@@ -449,14 +449,18 @@ def get_search_space_boundaries(ns):
 
 		# bonds, tune both value and force constants
 		if param.startswith('B') and param.endswith('val'):
-			search_space_boundaries.extend([ns.params_val[param_short]['range']])
+			# search_space_boundaries.extend([ns.params_val[param_short]['range']])
+			search_space_boundaries.extend([ns.user_config['config_bonded_opti'][param_short]['boundaries']['val']])
 		elif param.startswith('B') and param.endswith('fct'):
-			search_space_boundaries.extend([[ns.user_config['min_fct_bonds'], ns.user_config['max_fct_bonds']]])
+			# search_space_boundaries.extend([[ns.user_config['min_fct_bonds'], ns.user_config['max_fct_bonds']]])
+			search_space_boundaries.extend([ns.user_config['config_bonded_opti'][param_short]['boundaries']['fct']])
 
 		elif param.startswith('A') and param.endswith('val'):
-			search_space_boundaries.extend([ns.params_val[param_short]['range']])
+			# search_space_boundaries.extend([ns.params_val[param_short]['range']])
+			search_space_boundaries.extend([ns.user_config['config_bonded_opti'][param_short]['boundaries']['val']])
 		elif param.startswith('A') and param.endswith('fct'):
-			search_space_boundaries.extend([[ns.user_config['min_fct_angles'], ns.user_config['max_fct_angles']]])
+			# search_space_boundaries.extend([[ns.user_config['min_fct_angles'], ns.user_config['max_fct_angles']]])
+			search_space_boundaries.extend([ns.user_config['config_bonded_opti'][param_short]['boundaries']['fct']])
 
 		elif param.startswith('r_'):  # bead radius that we tune for each bead type or per group of bead types
 			search_space_boundaries.extend([[ns.user_config['min_radius'], ns.user_config['max_radius']]])
@@ -471,109 +475,109 @@ def get_search_space_boundaries(ns):
 
 
 # build initial guesses for particles initialization, by generating some noise around the best solution
-def get_cycle_restart_guess_list(ns):
-	path_log_file_1 = f'{ns.exec_folder}/{ns.opti_moves_file}'
-	best_per_sw_iter = {}  # find best score and parameters -- per swarm iteration
-	best_score, best_sw_iter = np.inf, None  # find best score -- within the previous opti cycle
-
-	with open(path_log_file_1, 'r') as fp:
-		lines = fp.read().split('\n')
-		params_names = lines[0].split()[4:]
-
-		for i in range(1, len(lines)):
-			if lines[i] != '':
-				sp_line = lines[i].split()
-				n_cycle = int(sp_line[0])
-				n_sw_iter = int(sp_line[1])
-				n_particle = int(sp_line[2])
-				iter_score = float(sp_line[3])
-				params_values = sp_line[4:]
-
-				# find the best particle per swarm iteration
-				if ns.n_cycle - 1 == n_cycle:  # pick ONLY from the previous cycle
-					if n_sw_iter not in best_per_sw_iter or iter_score < best_per_sw_iter[n_sw_iter]['iter_score']:
-						best_per_sw_iter[n_sw_iter] = {
-							'iter_score': iter_score,
-							'n_particle': n_particle,
-							'params': {}
-						}
-						for j, param_name in enumerate(params_names):
-							best_per_sw_iter[n_sw_iter]['params'][param_name] = float(params_values[j])
-					if iter_score < best_score:
-						best_score = iter_score
-						best_sw_iter = n_sw_iter
-
-	# initialize particles for the new opti cycle
-	cycle_restart_guess_list = []
-
-	# first particle == previous best in previous opti cycle
-	input_guess = []
-
-	for param_dict in ns.all_params_opti:  # list of dict having unique keys
-		for param in param_dict:  # accessing each single key of each dict
-
-			if param.startswith('B') and ns.tune_geoms:
-				if param_dict[param] == 2:
-					input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'], ns.params_val[param]['range'][0]), ns.params_val[param]['range'][1]))  # val
-				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'], ns.user_config['min_fct_bonds']), ns.user_config['max_fct_bonds']))  # fct
-
-			elif param.startswith('A') and ns.tune_geoms:
-				if param_dict[param] == 2:
-					input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'], ns.params_val[param]['range'][0]), ns.params_val[param]['range'][1]))  # val
-				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'], ns.user_config['min_fct_angles']), ns.user_config['max_fct_angles']))  # fct
-
-			elif param.startswith('r_'):
-				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][param], ns.user_config['min_radius']), ns.user_config['max_radius']))
-
-			elif param.startswith('LJ'):
-				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][param], ns.user_config['min_epsilon']), ns.user_config['max_epsilon']))
-
-	cycle_restart_guess_list.append(input_guess)
-
-	# other particles, noise around the previous best in previous opti cycle
-	for i in range(1, ns.nb_particles):
-		input_guess = []
-		nb_LJ = 0
-
-		for param_dict in ns.all_params_opti:  # list of dict having unique keys
-			for param in param_dict:  # accessing each single key of each dict
-
-				if param.startswith('B') and ns.tune_geoms:
-					if param_dict[param] == 2:
-						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] - config.bond_value_guess_variation, ns.params_val[param]['range'][0])
-						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] + config.bond_value_guess_variation, ns.params_val[param]['range'][1])
-						input_guess.append(draw_float(draw_low, draw_high, 3))  # val
-					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] - config.bond_fct_guess_variation, ns.user_config['min_fct_bonds'])
-					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] + config.bond_fct_guess_variation, ns.user_config['max_fct_bonds'])
-					input_guess.append(draw_float(draw_low, draw_high, 3))  # fct
-
-				elif param.startswith('A') and ns.tune_geoms:
-					if param_dict[param] == 2:
-						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param]['range'][0])
-						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param]['range'][1])
-						input_guess.append(draw_float(draw_low, draw_high, 3))  # val
-					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] - ns.user_config['angle_fct_guess_variation'], ns.user_config['min_fct_angles'])
-					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] + ns.user_config['angle_fct_guess_variation'], ns.user_config['max_fct_angles'])
-					input_guess.append(draw_float(draw_low, draw_high, 3))  # fct
-
-				elif param.startswith('r_'):
-					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][param] - ns.user_config['radius_guess_variation'], ns.user_config['min_radius'])
-					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][param] + ns.user_config['radius_guess_variation'], ns.user_config['max_radius'])
-					input_guess.append(draw_float(draw_low, draw_high, 3))  # radius
-
-				elif param.startswith('LJ'):
-					if ns.user_config['min_max_epsilon_relative_range'] == 'None':  # EPS ranges according to config file values
-						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][param] - ns.user_config['epsilon_guess_variation'], ns.user_config['min_epsilon'])
-						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][param] + ns.user_config['epsilon_guess_variation'], ns.user_config['max_epsilon'])
-					else:  # EPS ranges according to either flat or perc around starting values OF THE VERY FIRST OPTI CYCLE
-						draw_low = ns.eps_relative_ranges[nb_LJ][0]
-						draw_high = ns.eps_relative_ranges[nb_LJ][1]
-					input_guess.append(draw_float(draw_low, draw_high, 3))  # eps
-					nb_LJ += 1
-
-		cycle_restart_guess_list.append(input_guess)
-
-	return cycle_restart_guess_list
+# def get_cycle_restart_guess_list(ns):
+# 	path_log_file_1 = f'{ns.exec_folder}/{ns.opti_moves_file}'
+# 	best_per_sw_iter = {}  # find best score and parameters -- per swarm iteration
+# 	best_score, best_sw_iter = np.inf, None  # find best score -- within the previous opti cycle
+#
+# 	with open(path_log_file_1, 'r') as fp:
+# 		lines = fp.read().split('\n')
+# 		params_names = lines[0].split()[4:]
+#
+# 		for i in range(1, len(lines)):
+# 			if lines[i] != '':
+# 				sp_line = lines[i].split()
+# 				n_cycle = int(sp_line[0])
+# 				n_sw_iter = int(sp_line[1])
+# 				n_particle = int(sp_line[2])
+# 				iter_score = float(sp_line[3])
+# 				params_values = sp_line[4:]
+#
+# 				# find the best particle per swarm iteration
+# 				if ns.n_cycle - 1 == n_cycle:  # pick ONLY from the previous cycle
+# 					if n_sw_iter not in best_per_sw_iter or iter_score < best_per_sw_iter[n_sw_iter]['iter_score']:
+# 						best_per_sw_iter[n_sw_iter] = {
+# 							'iter_score': iter_score,
+# 							'n_particle': n_particle,
+# 							'params': {}
+# 						}
+# 						for j, param_name in enumerate(params_names):
+# 							best_per_sw_iter[n_sw_iter]['params'][param_name] = float(params_values[j])
+# 					if iter_score < best_score:
+# 						best_score = iter_score
+# 						best_sw_iter = n_sw_iter
+#
+# 	# initialize particles for the new opti cycle
+# 	cycle_restart_guess_list = []
+#
+# 	# first particle == previous best in previous opti cycle
+# 	input_guess = []
+#
+# 	for param_dict in ns.all_params_opti:  # list of dict having unique keys
+# 		for param in param_dict:  # accessing each single key of each dict
+#
+# 			if param.startswith('B') and ns.tune_geoms:
+# 				if param_dict[param] == 2:
+# 					input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'], ns.params_val[param]['range'][0]), ns.params_val[param]['range'][1]))  # val
+# 				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'], ns.user_config['min_fct_bonds']), ns.user_config['max_fct_bonds']))  # fct
+#
+# 			elif param.startswith('A') and ns.tune_geoms:
+# 				if param_dict[param] == 2:
+# 					input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'], ns.params_val[param]['range'][0]), ns.params_val[param]['range'][1]))  # val
+# 				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'], ns.user_config['min_fct_angles']), ns.user_config['max_fct_angles']))  # fct
+#
+# 			elif param.startswith('r_'):
+# 				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][param], ns.user_config['min_radius']), ns.user_config['max_radius']))
+#
+# 			elif param.startswith('LJ'):
+# 				input_guess.append(min(max(best_per_sw_iter[best_sw_iter]['params'][param], ns.user_config['min_epsilon']), ns.user_config['max_epsilon']))
+#
+# 	cycle_restart_guess_list.append(input_guess)
+#
+# 	# other particles, noise around the previous best in previous opti cycle
+# 	for i in range(1, ns.nb_particles):
+# 		input_guess = []
+# 		nb_LJ = 0
+#
+# 		for param_dict in ns.all_params_opti:  # list of dict having unique keys
+# 			for param in param_dict:  # accessing each single key of each dict
+#
+# 				if param.startswith('B') and ns.tune_geoms:
+# 					if param_dict[param] == 2:
+# 						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] - config.bond_value_guess_variation, ns.params_val[param]['range'][0])
+# 						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] + config.bond_value_guess_variation, ns.params_val[param]['range'][1])
+# 						input_guess.append(draw_float(draw_low, draw_high, 3))  # val
+# 					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] - config.bond_fct_guess_variation, ns.user_config['min_fct_bonds'])
+# 					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] + config.bond_fct_guess_variation, ns.user_config['max_fct_bonds'])
+# 					input_guess.append(draw_float(draw_low, draw_high, 3))  # fct
+#
+# 				elif param.startswith('A') and ns.tune_geoms:
+# 					if param_dict[param] == 2:
+# 						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param]['range'][0])
+# 						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_val'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param]['range'][1])
+# 						input_guess.append(draw_float(draw_low, draw_high, 3))  # val
+# 					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] - ns.user_config['angle_fct_guess_variation'], ns.user_config['min_fct_angles'])
+# 					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][f'{param}_fct'] + ns.user_config['angle_fct_guess_variation'], ns.user_config['max_fct_angles'])
+# 					input_guess.append(draw_float(draw_low, draw_high, 3))  # fct
+#
+# 				elif param.startswith('r_'):
+# 					draw_low = max(best_per_sw_iter[best_sw_iter]['params'][param] - ns.user_config['radius_guess_variation'], ns.user_config['min_radius'])
+# 					draw_high = min(best_per_sw_iter[best_sw_iter]['params'][param] + ns.user_config['radius_guess_variation'], ns.user_config['max_radius'])
+# 					input_guess.append(draw_float(draw_low, draw_high, 3))  # radius
+#
+# 				elif param.startswith('LJ'):
+# 					if ns.user_config['min_max_epsilon_relative_range'] == 'None':  # EPS ranges according to config file values
+# 						draw_low = max(best_per_sw_iter[best_sw_iter]['params'][param] - ns.user_config['epsilon_guess_variation'], ns.user_config['min_epsilon'])
+# 						draw_high = min(best_per_sw_iter[best_sw_iter]['params'][param] + ns.user_config['epsilon_guess_variation'], ns.user_config['max_epsilon'])
+# 					else:  # EPS ranges according to either flat or perc around starting values OF THE VERY FIRST OPTI CYCLE
+# 						draw_low = ns.eps_relative_ranges[nb_LJ][0]
+# 						draw_high = ns.eps_relative_ranges[nb_LJ][1]
+# 					input_guess.append(draw_float(draw_low, draw_high, 3))  # eps
+# 					nb_LJ += 1
+#
+# 		cycle_restart_guess_list.append(input_guess)
+#
+# 	return cycle_restart_guess_list
 
 
 # build initial guesses for particles initialization, as variations around initial parameters from either the ITPs or config file
@@ -588,14 +592,18 @@ def get_initial_guess_list(ns):
 		param_short = param.split('_')[0]
 
 		if param.startswith('B') and param.endswith('val'):
-			input_guess.append(ns.params_val[param_short]['ref_eq_val'])
+			# input_guess.append(ns.params_val[param_short]['ref_eq_val'])
+			input_guess.append(ns.user_config['config_bonded_opti'][param_short]['start']['val'])
 		elif param.startswith('B') and param.endswith('fct'):
-			input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
+			# input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
+			input_guess.append(ns.user_config['config_bonded_opti'][param_short]['start']['fct'])
 
 		elif param.startswith('A') and param.endswith('val'):
-			input_guess.append(ns.params_val[param_short]['ref_eq_val'])
+			# input_guess.append(ns.params_val[param_short]['ref_eq_val'])
+			input_guess.append(ns.user_config['config_bonded_opti'][param_short]['start']['val'])
 		elif param.startswith('A') and param.endswith('fct'):
-			input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
+			# input_guess.append(ns.user_config['init_bonded'][param_short]['fct'])
+			input_guess.append(ns.user_config['config_bonded_opti'][param_short]['start']['fct'])
 
 		elif param.startswith('r_'):
 			radii_grp = param.split('_')[1]
@@ -622,21 +630,25 @@ def get_initial_guess_list(ns):
 
 			# bonds, tune both value and force constants
 			if param.startswith('B') and param.endswith('val'):
-				draw_low = max(ns.params_val[param_short]['ref_eq_val'] - ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][0])
-				draw_high = min(ns.params_val[param_short]['ref_eq_val'] + ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				# draw_low = max(ns.params_val[param_short]['ref_eq_val'] - ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][0])
+				# draw_high = min(ns.params_val[param_short]['ref_eq_val'] + ns.user_config['bond_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				draw_low, draw_high = ns.user_config['config_bonded_opti'][param_short]['swarm_init']['val']
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 			elif param.startswith('B') and param.endswith('fct'):
-				draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['bond_fct_guess_variation'], ns.user_config['min_fct_bonds'])
-				draw_high = min(ns.user_config['init_bonded'][param_short]['fct'] + ns.user_config['bond_fct_guess_variation'], ns.user_config['max_fct_bonds'])
+				# draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['bond_fct_guess_variation'], ns.user_config['min_fct_bonds'])
+				# draw_high = min(ns.user_config['init_bonded'][param_short]['fct'] + ns.user_config['bond_fct_guess_variation'], ns.user_config['max_fct_bonds'])
+				draw_low, draw_high = ns.user_config['config_bonded_opti'][param_short]['swarm_init']['fct']
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 
 			elif param.startswith('A') and param.endswith('val'):
-				draw_low = max(ns.params_val[param_short]['ref_eq_val'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][0])
-				draw_high = min(ns.params_val[param_short]['ref_eq_val'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				# draw_low = max(ns.params_val[param_short]['ref_eq_val'] - ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][0])
+				# draw_high = min(ns.params_val[param_short]['ref_eq_val'] + ns.user_config['angle_value_guess_variation'], ns.params_val[param_short]['range'][1])
+				draw_low, draw_high = ns.user_config['config_bonded_opti'][param_short]['swarm_init']['val']
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 			elif param.startswith('A') and param.endswith('fct'):
-				draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['angle_fct_guess_variation'], ns.user_config['min_fct_angles'])
-				draw_high = min(ns.user_config['init_bonded'][param_short]['fct'] + ns.user_config['angle_fct_guess_variation'], ns.user_config['max_fct_angles'])
+				# draw_low = max(ns.user_config['init_bonded'][param_short]['fct'] - ns.user_config['angle_fct_guess_variation'], ns.user_config['min_fct_angles'])
+				# draw_high = min(ns.user_config['init_bonded'][param_short]['fct'] + ns.user_config['angle_fct_guess_variation'], ns.user_config['max_fct_angles'])
+				draw_low, draw_high = ns.user_config['config_bonded_opti'][param_short]['swarm_init']['fct']
 				input_guess.append(draw_float(draw_low, draw_high, 3))
 
 			elif param.startswith('r_'):

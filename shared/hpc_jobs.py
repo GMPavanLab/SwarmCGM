@@ -41,7 +41,6 @@ class HPCJobs:
         self.nb_jobs_slurm_pending = 0
         self.nb_jobs_slurm_running = 0
         self.finished = False
-        self.job_priority = ['SDPC', 'PDPC', 'DOPC', 'POPC', 'DPPC', 'DMPC', 'DLPC']  # TODO: this is just some manual thing, handle this automatically
 
     def check_slurm_queue(self):
         self.nb_jobs_slurm_pending = 0
@@ -109,62 +108,60 @@ class HPCJobs:
         print(f"  Jobs status on {time.strftime('%d-%m-%Y at %H:%M:%S')} -- Master Pending: {self.nb_jobs_master_pending} -- Slurm Pending: {self.nb_jobs_slurm_pending} -- Slurm Running: {self.nb_jobs_slurm_running}")
 
     def submit_slurm_jobs(self):
-        for job_prio in self.job_priority:
-            for job_name in self.jobs:
-                if job_prio in job_name:
-                    if self.jobs[job_name]['status'] == 'master_pending':
-                        if self.nb_jobs_slurm_all < self.hpc_nb_slots:  # limit number of jobs either in the HPC SLURM queue or running
+        for job_name in self.jobs:
+            if self.jobs[job_name]['status'] == 'master_pending':
+                if self.nb_jobs_slurm_all < self.hpc_nb_slots:  # limit number of jobs either in the HPC SLURM queue or running
 
-                            with working_dir(self.jobs[job_name]['job_exec_dir']):
-                                self._write_slurm_bash_file(job_name)
-                                sbatch_stdout = subprocess.run(f'sbatch run_{job_name}.sh', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.decode()
+                    with working_dir(self.jobs[job_name]['job_exec_dir']):
+                        self._write_slurm_bash_file(job_name)
+                        sbatch_stdout = subprocess.run(f'sbatch run_{job_name}.sh', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.decode()
 
-                            if sbatch_stdout.startswith('Submitted batch job'):
-                                job_id = int(sbatch_stdout.strip().split()[3])
+                    if sbatch_stdout.startswith('Submitted batch job'):
+                        job_id = int(sbatch_stdout.strip().split()[3])
+                        self.jobs[job_name]['job_id'] = job_id
+                        self.jobs[job_name]['status'] = 'slurm_pending'
+                        self.nb_jobs_slurm_pending += 1
+                        self.nb_jobs_slurm_all += 1
+                        self.nb_jobs_master_pending -= 1
+                        # print('Submitted JOB NAME', job_name, 'with JOB ID', job_id)
+                    else:
+
+                        # TODO: if a job submission failed, MAYBE stop the complete optimization process
+                        #       this should never happen in principle, so it would mean that a SLURM argument was
+                        #       inadequate (it can also be the account of the user that is incorrectly provided)
+                        # TODO (UPDATE): it seems that jobs actually correctly get queued even when cmd stdout
+                        #                reported failure such as:
+                        #   - ERROR: invalid partition "whatever partition" requested
+                        #   - ERROR: sbatch: error: Batch job submission failed: Socket timed out on send/recv operation
+
+                        print('WARNING: Attempt to SBATCH submit JOB NAME', job_name, 'seems to have failed, with error:\n ', sbatch_stdout)
+
+                        # TODO: try to understand if the following is enough for robustness (atm I don't want to try
+                        #       sbatch'ing multiple times)
+                        n_tries = 10
+                        job_ok = False
+                        while n_tries > 0 and job_ok is False:
+                            time.sleep(10)  # wait a bit because we don't know wtf is happening, in fact
+                            sacct_stdout = subprocess.run(f'sacct -n -X --format jobid --name {job_name}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.decode()
+                            try:
+                                job_id = int(sacct_stdout.strip())
                                 self.jobs[job_name]['job_id'] = job_id
                                 self.jobs[job_name]['status'] = 'slurm_pending'
                                 self.nb_jobs_slurm_pending += 1
                                 self.nb_jobs_slurm_all += 1
                                 self.nb_jobs_master_pending -= 1
-                                # print('Submitted JOB NAME', job_name, 'with JOB ID', job_id)
-                            else:
+                                job_ok = True
+                            except ValueError:  # if something else than an integer job id is returned
+                                pass
+                            n_tries -= 1
 
-                                # TODO: if a job submission failed, MAYBE stop the complete optimization process
-                                #       this should never happen in principle, so it would mean that a SLURM argument was
-                                #       inadequate (it can also be the account of the user that is incorrectly provided)
-                                # TODO (UPDATE): it seems that jobs actually correctly get queued even when cmd stdout
-                                #                reported failure such as:
-                                #   - ERROR: invalid partition "whatever partition" requested
-                                #   - ERROR: sbatch: error: Batch job submission failed: Socket timed out on send/recv operation
-
-                                print('WARNING: Attempt to SBATCH submit JOB NAME', job_name, 'seems to have failed, with error:\n ', sbatch_stdout)
-
-                                # TODO: try to understand if the following is enough for robustness (atm I don't want to try
-                                #       sbatch'ing multiple times)
-                                n_tries = 10
-                                job_ok = False
-                                while n_tries > 0 and job_ok is False:
-                                    time.sleep(10)  # wait a bit because we don't know wtf is happening, in fact
-                                    sacct_stdout = subprocess.run(f'sacct -n -X --format jobid --name {job_name}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.decode()
-                                    try:
-                                        job_id = int(sacct_stdout.strip())
-                                        self.jobs[job_name]['job_id'] = job_id
-                                        self.jobs[job_name]['status'] = 'slurm_pending'
-                                        self.nb_jobs_slurm_pending += 1
-                                        self.nb_jobs_slurm_all += 1
-                                        self.nb_jobs_master_pending -= 1
-                                        job_ok = True
-                                    except ValueError:  # if something else than an integer job id is returned
-                                        pass
-                                    n_tries -= 1
-
-                                if job_ok is False:  # we will kill all jobs and exit
-                                    print('  --> FAILURE TO START JOB, KILLING EVERYTHING\n')
-                                    for job_name in self.jobs:
-                                        subprocess.run(f'scancel --name {job_name}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                                    sys.exit('  --> KILLING MASTER NOW\n')
-                                else:
-                                    print('  --> The job submission finally went through, continuing\n')
+                        if job_ok is False:  # we will kill all jobs and exit
+                            print('  --> FAILURE TO START JOB, KILLING EVERYTHING\n')
+                            for job_name in self.jobs:
+                                subprocess.run(f'scancel --name {job_name}', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                            sys.exit('  --> KILLING MASTER NOW\n')
+                        else:
+                            print('  --> The job submission finally went through, continuing\n')
 
     def get_stats(self):
         jobs_stats = {}
@@ -242,23 +239,23 @@ class HPCJobs:
             # TODO: for WET -rdd should be 1.5 adapted automatically (actually, put +0.2 with respect to cut-off used in MDPs)
             # TODO: make something for options -bonded and -nb (non-bonded)
             fp.write(
-                f'''\ngmx grompp -c start_frame.gro -p system.top -f mini.mdp -n index.ndx -o mini -maxwarn 1'''  # SETUP MINI
+                f'''\ngmx grompp -c start_frame.gro -p system.top -f mini.mdp -n index.ndx -o mini -maxwarn 2'''  # SETUP MINI
                 f'''\nif test -f "mini.tpr"; then'''  # IF MINI SETUP IS OK
                 f'''\n  srun {self.gmx_path} mdrun -deffnm mini -ntomp $OMP_NUM_THREADS -pin on'''  # RUN MINI
                 f'''\n  if test -f "mini.gro"; then'''  # IF MINI FINISHED CORRECTLY
-                f'''\n    gmx grompp -c mini.gro -p system.top -f equi.mdp -n index.ndx -o equi'''  # SETUP EQUI
+                f'''\n    gmx grompp -c mini.gro -p system.top -f equi.mdp -n index.ndx -o equi -maxwarn 2'''  # SETUP EQUI
                 f'''\n    if test -f "equi.tpr"; then'''  # IF EQUI SETUP IS OK
                 f'''\n      sleep $[ ( $RANDOM % 11 )  + 5 ]s'''  # sleep a little in case all jobs would start at the same time
+                f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -rdd 1.8'''  # RUN EQUI
                 # f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN EQUI
-                # f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN EQUI
-                f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 1 1 4  -rdd 1.8 -bonded cpu -nb cpu'''  # 8BEADS
+                # f'''\n      srun {self.gmx_path} mdrun -deffnm equi -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 1 1 4  -rdd 1.8 -bonded cpu -nb cpu'''  # 8BEADS
                 f'''\n      if test -f "equi.gro"; then'''  # IF EQUI FINISHED CORRECTLY
-                f'''\n        gmx grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod'''  # SETUP PROD
+                f'''\n        gmx grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod -maxwarn 2'''  # SETUP PROD
                 f'''\n        if test -f "prod.tpr"; then'''  # IF PROD SETUP IS OK
                 f'''\n          sleep $[ ( $RANDOM % 11 )  + 5 ]s'''  # sleep a little in case all jobs would start at the same time
+                f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -rdd 1.8'''  # RUN PROD
                 # f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN PROD
-                # f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 2 2 2 -rdd 1.8 -bonded cpu -nb cpu'''  # RUN PROD
-                f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 1 1 4  -rdd 1.8 -bonded cpu -nb cpu'''  # 8BEADS
+                # f'''\n          srun {self.gmx_path} mdrun -deffnm prod -ntomp $OMP_NUM_THREADS -pin on -dlb no -dd 1 1 4  -rdd 1.8 -bonded cpu -nb cpu'''  # 8BEADS
                 f'''\n        fi'''
                 f'''\n      fi'''
                 f'''\n    fi'''

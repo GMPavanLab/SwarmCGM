@@ -27,7 +27,7 @@ def run_sims(ns, slot_nt, slot_gpu_id):
     starting_frame = 'start_frame.gro'
 
     # grompp -- MINI
-    gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c {starting_frame} -p system.top -f mini.mdp -o mini -maxwarn 1"
+    gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c {starting_frame} -p system.top -f mini.mdp -o mini -maxwarn 2"
     gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     gmx_out = gmx_process.communicate()[1].decode()
 
@@ -64,7 +64,7 @@ def run_sims(ns, slot_nt, slot_gpu_id):
     if os.path.isfile('mini.gro'):
 
         # grompp -- EQUI
-        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c mini.gro -p system.top -f equi.mdp -n index.ndx -o equi"
+        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c mini.gro -p system.top -f equi.mdp -n index.ndx -o equi -maxwarn 2"
         gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         gmx_out = gmx_process.communicate()[1].decode()
 
@@ -100,7 +100,7 @@ def run_sims(ns, slot_nt, slot_gpu_id):
     if os.path.isfile('equi.gro'):
 
         # grompp -- PROD
-        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod"
+        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod -maxwarn 2"
         gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         gmx_out = gmx_process.communicate()[1].decode()
 

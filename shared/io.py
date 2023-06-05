@@ -116,7 +116,7 @@ def print_job_output(ns, swarm_res, nb_eval_particle, lipid_code, temp):
             str_rdf_scoring = ""
             if not ns.user_config['score_rdfs']:
                 str_rdf_scoring = "(absent from score aggregation)"
-            if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+            if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
                 print(f"  Δ Geoms: {round(score_part['perc_delta_geoms'], 4)} ({round(score_part['perc_delta_geoms'], 2)} %)")
                 print(f"  Δ RDFs: {round(score_part['perc_delta_rdfs'], 4)} ({round(score_part['perc_delta_rdfs'], 2)} %)   {str_rdf_scoring}")
             else:
@@ -290,14 +290,9 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
             fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format(bead_type, ns.user_config['beads_masses'][bead_type]))
 
         # write WATER bead description if we are in WET
-        if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI2':
-            fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('P4', 72))
-
-        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3REMAP':
+        if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'].startswith('MARTINI3'):
             fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('W', 72))
-
-        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3':
-            fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('W', 72))
+            fp.write('  {0:<8} {1:>3.1f}  0.0  A     0   0\n'.format('TQ5', 36))  # Scheme for ion NA or CL, charge is add after
 
         fp.write('''\n[ nonbond_params ]
 ;  part part   func sig      eps\n''')
@@ -355,22 +350,35 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
         plt.savefig(f'{out_dir}/EPS_force_field.png')
         plt.close(fig)
 
-        if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3REMAP':
+        if ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'].startswith('MARTINI3'):
 
             water2beads = {
-                'Q1':   '     W Q1     1    0.465   5.220\n',
-                'Q5':   '     W Q5     1    0.465   6.340\n',
-                'N4a':  '     W N4a    1    0.465   3.500\n',
-                'SN4a': '     W SN4a   1    0.425   3.000\n',
-                'C1':   '     W C1     1    0.470   2.060\n',
-                'C4h':  '     W C4h    1    0.465   2.420\n',
-                'SC2':  '     W SC2    1    0.425   1.690\n',
-                'SC4h': '     W SC4h   1    0.425   1.800\n'
+                'Q1':   '      W Q1     1    0.4650   5.2200\n',
+                'Q5':   '      W Q5     1    0.4650   6.3400\n',
+                'N4a':  '     W N4a    1    0.4650   3.5000\n',
+                'SN4a': '      W SN4a   1    0.4250   3.0000\n',
+                'C1':   '      W C1     1    0.4700   2.0600\n',
+                'C4h':  '     W C4h    1    0.4650   2.4200\n',
+                'C5h':  '     W C5h    1    0.4650   2.5600\n',
+                'SC1':  '     W SC1    1    0.4370   1.4200\n',
+                'SC2':  '     W SC2    1    0.4250   1.6900\n',
+                'SC3':  '     W SC3    1    0.4250   1.8000\n',
+                'SC4h': '     W SC4h   1    0.4250   1.8000\n',
+                'TQ5':  '     W TQ5    1    0.3850   11.460\n'
             }
 
-            fp.write('     W W     1    0.470   4.650\n')  # this one is always present
-            for bead_type in ns.all_beads_types:  # the other are not forcefully mandatory
+            fp.write('      W W      1    0.4700   4.6500\n')  # this one is always present
+            for bead_type in ns.all_beads_types:  # some are not forcefully useful to write
                 fp.write(water2beads[bead_type])
+
+            # MANUAL ENTRY FOR IONS
+            fp.write('    TQ5 TQ5    1    0.3540   1.1800\n')  # this one is always present
+            for bead_type in ns.all_beads_types:
+                bead_type_1, bead_type_2 = sorted([bead_type, 'TQ5'])
+                bead_pair = ' '.join([bead_type_1, bead_type_2])
+                sig = ns.user_config['init_nonbonded'][bead_pair]['sig']  # here the sig is predefined
+                eps = ns.user_config['init_nonbonded'][bead_pair]['eps']  # get initial LJ from existing FF data
+                fp.write('{0:>7} {1:<7}1    {2:1.4f}   {3:1.4f}\n'.format(bead_type_1, bead_type_2, sig, eps))
 
             fp.write('''
 
@@ -384,36 +392,27 @@ def print_ff_file(ns, parameters_set, param_cursor, out_dir):
 ;id     type    resnr   residu  atom    cgnr    charge
  1      W      1        W       W      1       0
 
+;;;;;; Sodium ion
+
+[moleculetype]
+; molname 	nrexcl
+   NA 		1
+
+[atoms]
+;id 	type 	resnr 	residu 	atom 	cgnr 	charge
+ 1 	TQ5 	1 	ION 	NA 	1 	1.0 
+
+;;;;;; Chloride ion
+
+[moleculetype]
+; molname 	nrexcl
+   CL 		1
+
+[atoms]
+;id 	type 	resnr 	residu 	atom 	cgnr 	charge 
+ 1 	TQ5 	1 	ION 	CL 	1 	-1.0     35.453
+
 ''')
-
-        elif ns.user_config['solv'] == 'WET' and ns.user_config['mapping_type'] == 'MARTINI3':
-
-            water2beads = {
-                'Q1':   '     W  Q1     1    0.465   5.220\n',
-                'Q5':   '     W  Q5     1    0.465   6.340\n',
-                'N4a':  '     W  N4a    1    0.465   3.500\n',
-                'C1':   '     W  C1     1    0.470   2.060\n',
-                'C4h':  '     W  C4h    1    0.465   2.420\n',
-                'SN4a': '     W  SN4a   1    0.425   3.000\n'
-            }
-
-            fp.write('     W  W      1    0.470   4.650\n')  # this one is always present
-            for bead_type in ns.all_beads_types:  # the other are not forcefully mandatory
-                fp.write(water2beads[bead_type])
-
-            fp.write('''
-
-    ;;;;;; WATER (representing 4 H2O molecules)
-
-    [ moleculetype ]
-    ; molname  	nrexcl
-      W  	    	1
-
-    [ atoms ]
-    ;id 	type 	resnr 	residu 	atom 	cgnr 	charge
-     1 	W  	1 	W  	W 	1 	0 
-
-    ''')
 
     return
 
