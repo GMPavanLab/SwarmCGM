@@ -23,8 +23,9 @@ def get_score_and_plot_graphs_for_single_job(ns, nb_eval_particle, lipid_code, t
 
         if ns.user_config['exp_data'][lipid_code][temp]['apl'] is not None:
             delta_apl = cg_apl['avg'] - ns.user_config['exp_data'][lipid_code][temp]['apl']
-            perc_delta_apl_real = abs(delta_apl) / ns.user_config['exp_data'][lipid_code][temp]['apl'] * 100
-            perc_delta_apl_adapt = ns.user_config['apl_base_perc_error'] + max(0, abs(delta_apl) - ns.apl_exp_error) / ns.user_config['exp_data'][lipid_code][temp]['apl'] * 100
+            delta_apl_abs = abs(delta_apl)
+            perc_delta_apl_real = delta_apl_abs / ns.user_config['exp_data'][lipid_code][temp]['apl'] * 100
+            perc_delta_apl_adapt = ns.user_config['apl_base_perc_error'] + max(0, delta_apl_abs - ns.apl_exp_error) / ns.user_config['exp_data'][lipid_code][temp]['apl'] * 100
             if perc_delta_apl_adapt > ns.user_config['apl_cap_perc_error']:
                 perc_delta_apl_adapt = ns.user_config['apl_cap_perc_error']
         else:
@@ -32,8 +33,9 @@ def get_score_and_plot_graphs_for_single_job(ns, nb_eval_particle, lipid_code, t
 
         if ns.user_config['exp_data'][lipid_code][temp]['Dhh'] is not None:
             delta_thick = cg_thick['avg'] - ns.user_config['exp_data'][lipid_code][temp]['Dhh']
-            perc_delta_thick_real = abs(delta_thick) / ns.user_config['exp_data'][lipid_code][temp]['Dhh'] * 100
-            perc_delta_thick_adapt = ns.user_config['dhh_base_perc_error'] + max(0, abs(delta_thick) - ns.dhh_exp_error) / ns.user_config['exp_data'][lipid_code][temp]['Dhh'] * 100
+            delta_thick_abs = abs(delta_thick)
+            perc_delta_thick_real = delta_thick_abs / ns.user_config['exp_data'][lipid_code][temp]['Dhh'] * 100
+            perc_delta_thick_adapt = ns.user_config['dhh_base_perc_error'] + max(0, delta_thick_abs - ns.dhh_exp_error) / ns.user_config['exp_data'][lipid_code][temp]['Dhh'] * 100
             if perc_delta_thick_adapt > ns.user_config['dhh_cap_perc_error']:
                 perc_delta_thick_adapt = ns.user_config['dhh_cap_perc_error']
         else:
@@ -49,7 +51,7 @@ def get_score_and_plot_graphs_for_single_job(ns, nb_eval_particle, lipid_code, t
 
         # try to locate error for later directed swarm initialization
         # if user has specified that we make use of the simulations available for this lipid for bottom-up scoring
-        if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+        if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
             nb_beads_types = len(ns.lipid_beads_types[lipid_code])
             err_mat_eps = np.zeros((nb_beads_types, nb_beads_types), dtype=np.float)
 

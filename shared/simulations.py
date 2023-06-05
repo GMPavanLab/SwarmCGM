@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from shared.context_managers import working_dir
 import config
+import multiprocessing
 
 
 # build gromacs command with arguments
@@ -27,7 +28,7 @@ def run_sims(ns, slot_nt, slot_gpu_id):
     starting_frame = 'start_frame.gro'
 
     # grompp -- MINI
-    gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c {starting_frame} -p system.top -f mini.mdp -o mini -maxwarn 1"
+    gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c {starting_frame} -p system.top -f mini.mdp -o mini -maxwarn 2"
     gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     gmx_out = gmx_process.communicate()[1].decode()
 
@@ -64,7 +65,7 @@ def run_sims(ns, slot_nt, slot_gpu_id):
     if os.path.isfile('mini.gro'):
 
         # grompp -- EQUI
-        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c mini.gro -p system.top -f equi.mdp -n index.ndx -o equi"
+        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c mini.gro -p system.top -f equi.mdp -n index.ndx -o equi -maxwarn 2"
         gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         gmx_out = gmx_process.communicate()[1].decode()
 
@@ -100,7 +101,7 @@ def run_sims(ns, slot_nt, slot_gpu_id):
     if os.path.isfile('equi.gro'):
 
         # grompp -- PROD
-        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod"
+        gmx_cmd = f"{ns.user_config['gmx_path']} grompp -c equi.gro -p system.top -f prod.mdp -n index.ndx -o prod -maxwarn 2"
         gmx_process = subprocess.Popen([gmx_cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         gmx_out = gmx_process.communicate()[1].decode()
 
@@ -139,31 +140,50 @@ def run_sims(ns, slot_nt, slot_gpu_id):
 
 
 # for making a shared multiprocessing.Array() to handle slots states when running simulations in LOCAL (= NOT HPC)
-def init_process(arg):
-    global g_slots_states
-    g_slots_states = arg
+# def init_process(arg):
+#     global g_slots_states
+#     g_slots_states = arg
 
 
 def run_parallel(ns, job_exec_dir, nb_eval_particle, lipid_code, temp):
-    while True:
-        time.sleep(1)
-        for i in range(len(g_slots_states)):
-            if g_slots_states[i] == 1:  # if slot is available
+    subprocess_slot_id = multiprocessing.current_process()._identity[0] - 1  # 0-indexed (originally _identity is 1-indexed)
+    print(f'  Starting simulation for particle {nb_eval_particle} {lipid_code} {temp} on slot {subprocess_slot_id % len(ns.slots_nts) + 1}')
+    slot_nt = ns.slots_nts[subprocess_slot_id % len(ns.slots_nts)]
+    slot_gpu_id = ns.slots_gpu_ids[subprocess_slot_id % len(ns.slots_nts)]
+    # print(f'  Slot uses -nt {slot_nt} and -gpu_id {slot_gpu_id} and in directory {job_exec_dir}')
+    with working_dir(job_exec_dir):
+        gmx_time = run_sims(ns, slot_nt, slot_gpu_id)
+    time_start_str, time_end_str = '', ''  # NOTE: this is NOT displayed anywhere atm & we don't care much
+    time_elapsed_str = time.strftime('%H:%M:%S', time.gmtime(round(gmx_time)))
+    return time_start_str, time_end_str, time_elapsed_str
 
-                g_slots_states[i] = 0  # mark slot as busy
-                print(f'  Starting simulation for particle {nb_eval_particle} {lipid_code} {temp} on slot {i + 1}')
-                slot_nt = ns.slots_nts[i]
-                slot_gpu_id = ns.slots_gpu_ids[i]
-                # print(f'  Slot uses -nt {slot_nt} and -gpu_id {slot_gpu_id} and in directory {job_exec_dir}')
-                with working_dir(job_exec_dir):
-                    gmx_time = run_sims(ns, slot_nt, slot_gpu_id)
-                g_slots_states[i] = 1  # mark slot as available
-                # print(f'Finished simulation for particle {nb_eval_particle} with {lipid_code} {temp} on slot {i + 1}')
 
-                time_start_str, time_end_str = '', ''  # NOTE: this is NOT displayed anywhere atm & we don't care much
-                time_elapsed_str = time.strftime('%H:%M:%S', time.gmtime(round(gmx_time)))
-
-                return time_start_str, time_end_str, time_elapsed_str
+    # while True:
+    #     time.sleep(2)
+    #     start_with_slot_id = None
+    #
+    #     with g_slots_states.get_lock():
+    #         for i in range(len(g_slots_states)):
+    #             if g_slots_states[i] == 1:  # if slot is available
+    #                 start_with_slot_id = i
+    #                 g_slots_states[start_with_slot_id] = 0  # mark slot as busy
+    #                 print(f'  Starting simulation for particle {nb_eval_particle} {lipid_code} {temp} on slot {start_with_slot_id + 1}')
+    #                 break
+    #
+    #     if start_with_slot_id is not None:
+    #         slot_nt = ns.slots_nts[start_with_slot_id]
+    #         slot_gpu_id = ns.slots_gpu_ids[start_with_slot_id]
+    #         # print(f'  Slot uses -nt {slot_nt} and -gpu_id {slot_gpu_id} and in directory {job_exec_dir}')
+    #         with working_dir(job_exec_dir):
+    #             gmx_time = run_sims(ns, slot_nt, slot_gpu_id)
+    #
+    #         with g_slots_states.get_lock():
+    #             g_slots_states[start_with_slot_id] = 1  # mark slot as available
+    #         # print(f'Finished simulation for particle {nb_eval_particle} with {lipid_code} {temp} on slot {i + 1}')
+    #
+    #         time_start_str, time_end_str = '', ''  # NOTE: this is NOT displayed anywhere atm & we don't care much
+    #         time_elapsed_str = time.strftime('%H:%M:%S', time.gmtime(round(gmx_time)))
+    #         return time_start_str, time_end_str, time_elapsed_str
 
 
 

@@ -12,14 +12,14 @@ import MDAnalysis as mda
 from MDAnalysis.analysis import rdf
 from shared.io import check_log_files, backup_swarm_iter_logs_and_checkpoint
 import yaml
-
+    
 
 import config
 from shared.opti_CG import read_cg_itp_file_grp_comments, \
     get_search_space_boundaries, get_initial_guess_list, create_bins_and_dist_matrices, read_ndx_atoms2beads, \
     get_AA_bonds_distrib, get_AA_angles_distrib, \
     get_atoms_weights_in_beads, get_beads_MDA_atomgroups, initialize_cg_traj, \
-    map_aa2cg_traj, get_cycle_restart_guess_list
+    map_aa2cg_traj
 from shared.eval_func_parallel import eval_function_parallel_swarm  # new implementation of parallelization
 
 # import matplotlib
@@ -50,13 +50,9 @@ bullet = ' '
 required_args = args_parser.add_argument_group(bullet + 'OPTI CONFIGURATION')
 required_args.add_argument('-cfg', dest='cfg', help='YAML configuration file', type=str, metavar='')
 
-optional_args1 = args_parser.add_argument_group(bullet + 'HPC SETTINGS')
-optional_args1.add_argument('-master_job_name', dest='master_job_name',
-                            help='Job name of the Master process in the HPC SLURM queue', type=str, default='MASTER', metavar='MASTER')
-
-optional_args3 = args_parser.add_argument_group(bullet + 'OTHERS')
-optional_args3.add_argument('-h', '--help', help='Show this help message and exit', action='help')
-optional_args3.add_argument('-v', '--verbose', dest='verbose', help='Verbose mode', action='store_true',
+optional_args = args_parser.add_argument_group(bullet + 'OTHERS')
+optional_args.add_argument('-h', '--help', help='Show this help message and exit', action='help')
+optional_args.add_argument('-v', '--verbose', dest='verbose', help='Verbose mode', action='store_true',
                             default=False)
 
 # arguments handling, display command line if help or no arguments provided
@@ -139,7 +135,8 @@ if os.path.isdir(ns.user_config['exec_folder']):
             max_found_checkpoint_nb = int(filename.split('.')[0].split('_')[2])
             if max_found_checkpoint_nb > fstpso_checkpoint_in_nb:
                 fstpso_checkpoint_in_nb = max_found_checkpoint_nb
-    if fstpso_checkpoint_in_nb > 0 and not ns.user_config['next_cycle']:
+    # if fstpso_checkpoint_in_nb > 0 and not ns.user_config['next_cycle']:
+    if fstpso_checkpoint_in_nb > 0:  # mid-2022 next_cycle is not used anymore
         fstpso_checkpoint_in = f'fstpso_checkpoint_{fstpso_checkpoint_in_nb}.obj'
         print('Loading FST-PSO checkpoint file:', fstpso_checkpoint_in, '\n')
 
@@ -160,18 +157,19 @@ if os.path.isdir(ns.user_config['exec_folder']):
         # it is possible that there is no FST-PSO checkpoint but the exec directory still exists
         # this happens when the opti did not reach the end of SWARM iter 2)
         if n_cycle_1 is not None:
-            if fstpso_checkpoint_in is not None or ns.user_config['next_cycle']:
+            # if fstpso_checkpoint_in is not None or ns.user_config['next_cycle']:
+            if fstpso_checkpoint_in is not None:  # mid-2022 next_cycle is not used anymore
                 try:
                     n_cycle = n_cycle_1  # continue within same opti cycle
                     n_swarm_iter = n_swarm_iter_1 + 1  # continue with the next swarm iteration
                     n_particle = n_particle_1
 
                     # if we want to do a calibrated re-initialization of the swarm from best results of the previous opti cycle
-                    if ns.user_config['next_cycle']:
-                        n_cycle += 1
-                        print('--> Going for a calibrated restart in a new optimization cycle')
-                    else:
-                        print('--> Going to continue an on-going optimization cycle')
+                    # if ns.user_config['next_cycle']:
+                    #     n_cycle += 1
+                    #     print('--> Going for a calibrated restart in a new optimization cycle')
+                    # else:
+                    print('--> Going to continue an on-going optimization cycle')
 
                 except ValueError:  # means we have just read the headers (not sure this below is relevant anymore)
                     n_swarm_iter = 1  # default start without checkpoints
@@ -308,12 +306,12 @@ for lipid_code in ns.user_config['lipids_codes']:
         else:
             str_exp_dhh = str(exp_dhh) + ' nm²'
 
-        print(' ', lipid_code, '--', temp, '-- APL:', str_exp_apl, '-- Dhh:', exp_dhh, 'nm -- Weight of the AA ref data:', ns.user_config['reference_AA_weight'][lipid_code] * 100, '%')
+        print(' ', lipid_code, '--', temp, '-- APL:', str_exp_apl, '-- Dhh:', exp_dhh, 'nm -- Weight of the AA ref data:', ns.user_config['reference_AA_weight'][lipid_code][temp] * 100, '%')
 
 # check AA files for given lipids
 for lipid_code in ns.user_config['lipids_codes']:
     for temp in ns.user_config['lipids_codes'][lipid_code]:
-        if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+        if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
             if not (os.path.isfile(f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.tpr")
                and os.path.isfile(f"{config.aa_data_dir}/AA_traj_{lipid_code}_{temp}.xtc")):
                 sys.exit(f"{config.header_error}Cannot find TPR & XTC for {lipid_code} at temperature {temp}")
@@ -326,7 +324,7 @@ for lipid_code in ns.user_config['lipids_codes']:
                 f"{config.cg_models_data_dir}/MAP_{lipid_code}_{ns.user_config['mapping_type']}_{ns.user_config['solv']}.ndx"):
             pass
         else:
-            if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+            if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
                 sys.exit(f"{config.header_error}Cannot find file of mapping {ns.user_config['mapping_type']} for {lipid_code}")
             else:
                 pass
@@ -413,7 +411,7 @@ for lipid_code in ns.user_config['lipids_codes']:
             ns.rdf_indep_weights[lipid_code][temp] = {}  # that is just initialized for later
 
             # if user has specified that we make use of the simulations available for this lipid for bottom-up scoring
-            if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+            if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
 
                 # read atomistic trajectory
                 print('\n  Reading AA trajectory for', lipid_code, temp, 'with mapping', ns.user_config['mapping_type'], 'and solvent',
@@ -456,8 +454,7 @@ for lipid_code in ns.user_config['lipids_codes']:
                 # calculate Dhh delta for thickness calculations
                 # NOTE: it works because trajectories are WHOLE for each molecule
                 print('\n  Calculating Dhh delta of phosphate position between AA-CG')
-                # NOTE: when we start incorporating lipids for which the code is not 4 letters this will NOT work
-                head_type = lipid_code[2:]
+                head_type = lipid_code[-2:]  # TODO: better robustness, currently picking the 2 last letters to identify head type
                 phosphate_atom_id = ns.user_config['phosphate_pos'][head_type]['AA']
                 phosphate_bead_id = ns.user_config['phosphate_pos'][head_type]['CG']
                 phosphate_bead_id -= 1  # retrieve 0-indexing
@@ -508,7 +505,7 @@ for lipid_code in ns.user_config['lipids_codes']:
                 #       (anyway the impact would be very small but really, who knows ??)
 
                 # get the id of the bead that should be used as reference for Dhh calculation + the delta for Dhh calculation, if any
-                head_type = lipid_code[2:]  # TODO: when we start incorporating lipids for which the code is not 4 letters this will NOT work
+                head_type = lipid_code[-2:]  # TODO: better robustness, currently picking the 2 last letters to identify head type
                 phosphate_atom_id = ns.user_config['phosphate_pos'][head_type]['AA']
                 phosphate_atom_id -= 1
 
@@ -802,14 +799,14 @@ print()
 print('Found the following CG BONDS TYPES across all input CG models:\n ', ns.all_bonds_types)
 
 # if user specified to tune all equi values or all force constants for bonds, we build a list containing all these bond types
-if ns.user_config['tune_bonds_equi_val'] == 'all':
-    ns.user_config['tune_bonds_equi_val'] = []
-    for geom_grp in ns.all_bonds_types:
-        ns.user_config['tune_bonds_equi_val'].append(geom_grp)
-if ns.user_config['tune_bonds_fct'] == 'all':
-    ns.user_config['tune_bonds_fct'] = []
-    for geom_grp in ns.all_bonds_types:
-        ns.user_config['tune_bonds_fct'].append(geom_grp)
+# if ns.user_config['tune_bonds_equi_val'] == 'all':
+#     ns.user_config['tune_bonds_equi_val'] = []
+#     for geom_grp in ns.all_bonds_types:
+#         ns.user_config['tune_bonds_equi_val'].append(geom_grp)
+# if ns.user_config['tune_bonds_fct'] == 'all':
+#     ns.user_config['tune_bonds_fct'] = []
+#     for geom_grp in ns.all_bonds_types:
+#         ns.user_config['tune_bonds_fct'].append(geom_grp)
 
 # find all types of angles in presence in the input CG models, then attribute relevant angle_ids to their geom_grp
 ns.all_angles_types = {}
@@ -832,14 +829,14 @@ print()
 print('Found the following CG ANGLES TYPES across all input CG models:\n ', ns.all_angles_types)
 
 # if user specified to tune all equi values or all force constants for angles, we build a list containing all these bond types
-if ns.user_config['tune_angles_equi_val'] == 'all':
-    ns.user_config['tune_angles_equi_val'] = []
-    for geom_grp in ns.all_angles_types:
-        ns.user_config['tune_angles_equi_val'].append(geom_grp)
-if ns.user_config['tune_angles_fct'] == 'all':
-    ns.user_config['tune_angles_fct'] = []
-    for geom_grp in ns.all_angles_types:
-        ns.user_config['tune_angles_fct'].append(geom_grp)
+# if ns.user_config['tune_angles_equi_val'] == 'all':
+#     ns.user_config['tune_angles_equi_val'] = []
+#     for geom_grp in ns.all_angles_types:
+#         ns.user_config['tune_angles_equi_val'].append(geom_grp)
+# if ns.user_config['tune_angles_fct'] == 'all':
+#     ns.user_config['tune_angles_fct'] = []
+#     for geom_grp in ns.all_angles_types:
+#         ns.user_config['tune_angles_fct'].append(geom_grp)
 
 # add radii used per lipid (i.e. beads present in a given lipid)
 if ns.user_config['tune_radii']:
@@ -862,22 +859,21 @@ for lipid_code in ns.user_config['lipids_codes']:
     try:
         for bond_id in range(len(ns.cg_itps[lipid_code]['bond'])):
             geom_grp = ns.cg_itps[lipid_code]['bond'][bond_id]['geom_grp']
-            ns.cg_itps[lipid_code]['bond'][bond_id]['value'] = ns.user_config['init_bonded'][geom_grp]['val']
-            ns.cg_itps[lipid_code]['bond'][bond_id]['fct'] = ns.user_config['init_bonded'][geom_grp]['fct']
+            ns.cg_itps[lipid_code]['bond'][bond_id]['value'] = ns.user_config['config_bonded_opti'][geom_grp]['start']['val']
+            ns.cg_itps[lipid_code]['bond'][bond_id]['fct'] = ns.user_config['config_bonded_opti'][geom_grp]['start']['fct']
         # print('GEOM GRP:', geom_grp, '-- BOND ID:', bond_id, '-- FCT:', ns.user_config['init_bonded'][ns.mapping_type][ns.user_config['solv']][geom_grp]['fct'])
         for angle_id in range(len(ns.cg_itps[lipid_code]['angle'])):
             geom_grp = ns.cg_itps[lipid_code]['angle'][angle_id]['geom_grp']
-            ns.cg_itps[lipid_code]['angle'][angle_id]['value'] = ns.user_config['init_bonded'][geom_grp]['val']
-            ns.cg_itps[lipid_code]['angle'][angle_id]['fct'] = ns.user_config['init_bonded'][geom_grp]['fct']
+            ns.cg_itps[lipid_code]['angle'][angle_id]['value'] = ns.user_config['config_bonded_opti'][geom_grp]['start']['val']
+            ns.cg_itps[lipid_code]['angle'][angle_id]['fct'] = ns.user_config['config_bonded_opti'][geom_grp]['start']['fct']
         # print('GEOM GRP:', geom_grp, '-- ANGLE ID:', angle_id, '-- FCT:', ns.user_config['init_bonded'][ns.mapping_type][ns.user_config['solv']][geom_grp]['fct'])
     except:
-        sys.exit(
-            '\nMissing default value and fct for ' + ns.user_config['mapping_type'] + ' geom grp ' + geom_grp + ' in lipid ' + lipid_code + ' with solvent ' + ns.user_config['solv'])  # +')\nIf argument -geoms_val_from_cfg is active ('+str(ns.geoms_val_from_cfg)+') then angles values that should be fixed at 90°, 120° or 180° must be defined, all the others can be set to None in config file')
+        sys.exit(f"\nMissing default value and fct for {ns.user_config['mapping_type']} geom grp {geom_grp} in lipid {lipid_code} with solvent {ns.user_config['solv']}\nIf argument -geoms_val_from_cfg is active ({ns.geoms_val_from_cfg}) then angles values that should be fixed at 90°, 120° or 180° must be defined, all the others can be set to None in config file")
 
 # find dimensions of the search space for optimization -- the extensive definition that can be reduced later during each optimization cycle
 # in particular, find if both value and fct should be optimized for angles
 ns.all_params_opti = []
-ns.params_val = {}
+AA_reference_vals = {}
 
 print()
 print('Collecting bonds and angles values from AA mapped data')
@@ -917,33 +913,35 @@ print('Collecting bonds and angles values from AA mapped data')
 for geom_grp in ns.all_bonds_types:
 
     # find min/max values of bonds in the geom group at all selected temperatures + average of their average value
-    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'ref_eq_val': None}
+    AA_reference_vals[geom_grp] = {'range': [np.inf, -np.inf]}
 
-    if geom_grp in ns.user_config['tune_bonds_equi_val']:
+    # if geom_grp in ns.user_config['tune_bonds_equi_val']:
+    if ns.user_config['config_bonded_opti'][geom_grp]['swarm_init']['val'] != 'fixed':
         ns.all_params_opti.append(f'{geom_grp}_val')
-    if geom_grp in ns.user_config['tune_bonds_fct']:
+    # if geom_grp in ns.user_config['tune_bonds_fct']:
+    if ns.user_config['config_bonded_opti'][geom_grp]['swarm_init']['fct'] != 'fixed':
         ns.all_params_opti.append(f'{geom_grp}_fct')
 
     # if user has specified that we make use of the simulations available for this lipid in the bottom-up scoring
-    if ns.user_config['reference_AA_weight'][lipid_code] > 0:
-        geom_grp_val = []
-        for lipid_code in ns.all_bonds_types[geom_grp]:
-            for bond_id in ns.all_bonds_types[geom_grp][lipid_code]:
-                for temp in ns.user_config['lipids_codes'][lipid_code]:
+    geom_grp_val = []
+    for lipid_code in ns.all_bonds_types[geom_grp]:
+        for bond_id in ns.all_bonds_types[geom_grp][lipid_code]:
+            for temp in ns.user_config['lipids_codes'][lipid_code]:
+                if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
                     values_dom = ns.cg_itps[lipid_code]['bond'][bond_id]['values_dom_' + temp]
-                    ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0])
-                    ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1])
+                    AA_reference_vals[geom_grp]['range'][0] = min(AA_reference_vals[geom_grp]['range'][0], values_dom[0])
+                    AA_reference_vals[geom_grp]['range'][1] = max(AA_reference_vals[geom_grp]['range'][1], values_dom[1])
                     geom_grp_val.append(ns.cg_itps[lipid_code]['bond'][bond_id]['avg_' + temp])
+    if len(geom_grp_val) > 0:
         geom_grp_avg = round(np.mean(geom_grp_val), 3)
         geom_grp_std = round(np.std(geom_grp_val), 3)
     else:
-        ns.params_val[geom_grp]['range'][0] = round(ns.user_config['init_bonded'][geom_grp]['val'] - ns.user_config['bond_value_guess_variation'], 3)
-        ns.params_val[geom_grp]['range'][1] = round(ns.user_config['init_bonded'][geom_grp]['val'] + ns.user_config['bond_value_guess_variation'], 3)
+        AA_reference_vals[geom_grp]['range'][0] = 'Unknown'
+        AA_reference_vals[geom_grp]['range'][1] = 'Unknown'
         geom_grp_avg = 'Unknown'
         geom_grp_std = 'Unknown'
 
     # DISABLED BLOCK BELOW SO THAT WE ALWAYS START FROM ALL THE VALUES PRESENT IN THE CONFIG FILE
-    ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
     # by default we start from the values in the config file, and we instead start from the AA average if the parameter has to be tuned
     # in case we have no AA reference data, then we fall back to the values in the config file
     # if geom_grp in ns.user_config['tune_bonds_equi_val'] and geom_grp_avg != 'Unknown':
@@ -954,38 +952,43 @@ for geom_grp in ns.all_bonds_types:
     # else:
     #     ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
 
-    print(f"  {geom_grp} -- Used: {ns.cg_itps[lipid_code]['bond'][bond_id]['value']} -- AA Avg: {geom_grp_avg} -- AA Std: {geom_grp_std} -- Range: {ns.params_val[geom_grp]['range']}")
+    if 'val' not in ns.user_config['config_bonded_opti'][geom_grp]['boundaries']:
+        ns.user_config['config_bonded_opti'][geom_grp]['boundaries']['val'] = ['Unknown', 'Unknown']
+
+    print(f"  {geom_grp} -- Used: {ns.cg_itps[lipid_code]['bond'][bond_id]['value']} -- Opti Range: {ns.user_config['config_bonded_opti'][geom_grp]['boundaries']['val']} -- AA Avg: {geom_grp_avg} -- AA Std: {geom_grp_std} -- AA Range: {AA_reference_vals[geom_grp]['range']}")
 
 for geom_grp in ns.all_angles_types:
 
     # find min/max values of angles in the geom group at all selected temperatures + average of their average value
-    ns.params_val[geom_grp] = {'range': [np.inf, -np.inf], 'ref_eq_val': None}
+    AA_reference_vals[geom_grp] = {'range': [np.inf, -np.inf]}
 
-    if geom_grp in ns.user_config['tune_angles_equi_val']:
+    # if geom_grp in ns.user_config['tune_angles_equi_val']:
+    if ns.user_config['config_bonded_opti'][geom_grp]['swarm_init']['val'] != 'fixed':
         ns.all_params_opti.append(f'{geom_grp}_val')
-    if geom_grp in ns.user_config['tune_angles_fct']:
+    # if geom_grp in ns.user_config['tune_angles_fct']:
+    if ns.user_config['config_bonded_opti'][geom_grp]['swarm_init']['fct'] != 'fixed':
         ns.all_params_opti.append(f'{geom_grp}_fct')
 
     # if user has specified that we make use of the simulations available for this lipid in the bottom-up scoring
-    if ns.user_config['reference_AA_weight'][lipid_code] > 0:
-        geom_grp_val = []
-        for lipid_code in ns.all_angles_types[geom_grp]:
-            for angle_id in ns.all_angles_types[geom_grp][lipid_code]:
-                for temp in ns.user_config['lipids_codes'][lipid_code]:
+    geom_grp_val = []
+    for lipid_code in ns.all_angles_types[geom_grp]:
+        for angle_id in ns.all_angles_types[geom_grp][lipid_code]:
+            for temp in ns.user_config['lipids_codes'][lipid_code]:
+                if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
                     values_dom = ns.cg_itps[lipid_code]['angle'][angle_id]['values_dom_' + temp]
-                    ns.params_val[geom_grp]['range'][0] = min(ns.params_val[geom_grp]['range'][0], values_dom[0])
-                    ns.params_val[geom_grp]['range'][1] = max(ns.params_val[geom_grp]['range'][1], values_dom[1])
+                    AA_reference_vals[geom_grp]['range'][0] = min(AA_reference_vals[geom_grp]['range'][0], values_dom[0])
+                    AA_reference_vals[geom_grp]['range'][1] = max(AA_reference_vals[geom_grp]['range'][1], values_dom[1])
                     geom_grp_val.append(ns.cg_itps[lipid_code]['angle'][angle_id]['avg_' + temp])
+    if len(geom_grp_val) > 0:
         geom_grp_avg = round(np.mean(geom_grp_val), 1)
         geom_grp_std = round(np.std(geom_grp_val), 1)
     else:
-        ns.params_val[geom_grp]['range'][0] = round(ns.user_config['init_bonded'][geom_grp]['val'] - ns.user_config['angle_value_guess_variation'], 1)
-        ns.params_val[geom_grp]['range'][1] = round(ns.user_config['init_bonded'][geom_grp]['val'] + ns.user_config['angle_value_guess_variation'], 1)
+        AA_reference_vals[geom_grp]['range'][0] = 'Unknown'
+        AA_reference_vals[geom_grp]['range'][1] = 'Unknown'
         geom_grp_avg = 'Unknown'
         geom_grp_std = 'Unknown'
 
     # DISABLED BLOCK BELOW SO THAT WE ALWAYS START FROM ALL THE VALUES PRESENT IN THE CONFIG FILE
-    ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
     # by default we start from the values in the config file, and we instead start from the AA average if the parameter has to be tuned
     # in case we have no AA reference data, then we fall back to the values in the config file
     # if geom_grp in ns.user_config['tune_angles_equi_val'] and geom_grp_avg != 'Unknown':
@@ -996,7 +999,10 @@ for geom_grp in ns.all_angles_types:
     # else:
     #     ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
 
-    print(f"  {geom_grp} -- Used: {ns.cg_itps[lipid_code]['angle'][angle_id]['value']} -- AA Avg: {geom_grp_avg} -- AA Std: {geom_grp_std} -- Range: {ns.params_val[geom_grp]['range']}")
+    if 'val' not in ns.user_config['config_bonded_opti'][geom_grp]['boundaries']:
+        ns.user_config['config_bonded_opti'][geom_grp]['boundaries']['val'] = ['Unknown', 'Unknown']
+
+    print(f"  {geom_grp} -- Used: {ns.cg_itps[lipid_code]['angle'][angle_id]['value']} -- Opti Range: {ns.user_config['config_bonded_opti'][geom_grp]['boundaries']['val']} -- AA Avg: {geom_grp_avg} -- AA Std: {geom_grp_std} -- AA Range: {AA_reference_vals[geom_grp]['range']}")
 
 if ns.user_config['tune_radii']:
     for radii_grp in sorted(ns.user_config['tune_radii_in_groups']):
@@ -1033,41 +1039,38 @@ for lipid_code in ns.lipid_params_opti:
 # PLOT RDF FOR EACH BEADS PAIR FOR EACH LIPID AT ALL TEMPERATURES #
 ###################################################################
 
-# if user has specified that we make use of the simulations available for this lipid
-# in the bottom-up component of the score
-if ns.user_config['reference_AA_weight'][lipid_code] > 0:
-
-    # RDFs -- Short cutoff
-    for lipid_code in ns.user_config['lipids_codes']:
-
-        nb_beads_types = len(ns.lipid_beads_types[lipid_code])
-        fig = plt.figure(figsize=(nb_beads_types * 3, nb_beads_types * 3))
-        ax = fig.subplots(nrows=nb_beads_types, ncols=nb_beads_types, squeeze=False)
-
-        for i in range(nb_beads_types):  # matrix of LJ
-            for j in range(nb_beads_types):
-
-                if j >= i:
-                    for temp in ns.user_config['lipids_codes'][lipid_code]:
-                        bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], \
-                                                   ns.lipid_beads_types[lipid_code][j]
-                        pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
-                        _, rdf = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]
-                        rdf_norm = rdf / np.sum(rdf)  # norm to sum 1 for solo display
-                        ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, rdf_norm, label=temp)
-
-                    ax[i][j].set_title(bead_type_1 + ' ' + bead_type_2)
-                    ax[i][j].grid()
-                    ax[i][j].set_xlim(0, ns.user_config['cutoff_rdfs'])
-                # ax[i][j].legend()
-                else:
-                    ax[i][j].set_visible(False)
-
-        plt.suptitle(lipid_code + ' ' + ' '.join(ns.user_config['lipids_codes'][lipid_code]))
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
-        plt.savefig(
-            ns.user_config['exec_folder'] + '/RDF_ref_AA-mapped_' + lipid_code + '_cutoff_' + str(ns.user_config['cutoff_rdfs']) + '_nm.png')
-        plt.close(fig)
+# NOTE: this is NOT working if there are some AA data missing because calibration is TOP-DOWN only for some lipids
+# # RDFs -- Short cutoff
+# for lipid_code in ns.user_config['lipids_codes']:
+#
+#     nb_beads_types = len(ns.lipid_beads_types[lipid_code])
+#     fig = plt.figure(figsize=(nb_beads_types * 3, nb_beads_types * 3))
+#     ax = fig.subplots(nrows=nb_beads_types, ncols=nb_beads_types, squeeze=False)
+#
+#     for i in range(nb_beads_types):  # matrix of LJ
+#         for j in range(nb_beads_types):
+#
+#             if j >= i:
+#                 for temp in ns.user_config['lipids_codes'][lipid_code]:
+#                     bead_type_1, bead_type_2 = ns.lipid_beads_types[lipid_code][i], \
+#                                                ns.lipid_beads_types[lipid_code][j]
+#                     pair_type = '_'.join(sorted([bead_type_1, bead_type_2]))
+#                     _, rdf = ns.cg_itps[lipid_code]['rdf_' + temp + '_short'][pair_type]
+#                     rdf_norm = rdf / np.sum(rdf)  # norm to sum 1 for solo display
+#                     ax[i][j].plot(ns.bins_vol_shell - ns.user_config['bw_rdfs'] / 2, rdf_norm, label=temp)
+#
+#                 ax[i][j].set_title(bead_type_1 + ' ' + bead_type_2)
+#                 ax[i][j].grid()
+#                 ax[i][j].set_xlim(0, ns.user_config['cutoff_rdfs'])
+#             # ax[i][j].legend()
+#             else:
+#                 ax[i][j].set_visible(False)
+#
+#     plt.suptitle(lipid_code + ' ' + ' '.join(ns.user_config['lipids_codes'][lipid_code]))
+#     plt.tight_layout(rect=[0, 0, 1, 0.95])
+#     plt.savefig(
+#         ns.user_config['exec_folder'] + '/RDF_ref_AA-mapped_' + lipid_code + '_cutoff_' + str(ns.user_config['cutoff_rdfs']) + '_nm.png')
+#     plt.close(fig)
 
 
 ################################
@@ -1100,7 +1103,7 @@ params_all_str = ' '.join(ns.all_params_opti)  # comprehensive string of the par
 
 # next blocks are log files that store results at different levels of aggregation
 # careful not to erase previous log files if we are doing a restart from FST-PSO checkpoint
-if fstpso_checkpoint_in is None and not ns.user_config['next_cycle']:
+if fstpso_checkpoint_in is None:
     with open(f"{ns.user_config['exec_folder']}/{ns.opti_moves_file}", 'w') as fp:
         fp.write('n_cycle n_swarm_iter n_particle particle_score ' + params_all_str + '\n')
     with open(f"{ns.user_config['exec_folder']}/{ns.opti_moves_details_lipid_temp_file}", 'w') as fp:
@@ -1115,7 +1118,7 @@ if fstpso_checkpoint_in is None and not ns.user_config['next_cycle']:
 # somehow long cycles with calibrated restarts using ALL parameters
 # (= no selection of bonds/angles/dihedrals/whatever like in Swarm-CG bonded version)
 opti_cycles = {
-    1: {'sim_time': ns.user_config['cg_time_prod'], 'cg_sampling': 4 / 3 * ns.user_config['cg_time_prod'], 'max_sw_iter': 50, 'max_sw_iter_no_new_best': 15}
+    1: {'sim_time': ns.user_config['cg_time_prod'], 'cg_sampling': 4 / 3 * ns.user_config['cg_time_prod'], 'max_sw_iter': 50, 'max_sw_iter_no_new_best': 5}
 }
 
 # for tests without opti cycles
@@ -1171,24 +1174,32 @@ for i in range(n_cycle, len(opti_cycles) + 1):
     # formula used by FST-PSO to choose nb of particles, which initially comes from some statistical study
     # demonstrating this choice is optimal -- this also defines the number of initial guesses we need to provide
     if ns.user_config['nb_particles'] == 'auto':
-        ns.nb_particles = int(round(10 + 2 * np.sqrt(len(search_space_boundaries))))
+        ns.nb_particles = int(10 + 2 * np.sqrt(len(search_space_boundaries)))
     else:
         ns.nb_particles = ns.user_config['nb_particles']
 
+    # NOTE: mid-2022 this block is obsolete because next_cycle is not used anymore, and the block below replaces it
     # if we are starting the very first optimization cycle: initial guesses from config + calibrated noise
-    if ns.n_swarm_iter == 1:
-        initial_guess_list = get_initial_guess_list(ns)
-    # if we restart in a new optimization cycle: initial guesses from previous selected points in previous opti cycle
-    elif ns.user_config['next_cycle']:
-        initial_guess_list = get_cycle_restart_guess_list(ns)
-    # if we are continuing within a currently on-going optimization cycle: NO guesses
-    else:
-        initial_guess_list = None
+    # if ns.n_swarm_iter == 1:
+    #     initial_guess_list = get_initial_guess_list(ns)
+    # # if we restart in a new optimization cycle: initial guesses from previous selected points in previous opti cycle
+    # elif ns.user_config['next_cycle']:
+    #     initial_guess_list = get_cycle_restart_guess_list(ns)
+    # # if we are continuing within a currently on-going optimization cycle: NO guesses
+    # else:
+    #     initial_guess_list = None
+    #
+    #     # restart from a given checkpoint, if one was provided
+    #     if fstpso_checkpoint_in is not None and not ns.user_config['next_cycle']:
+    #         print('Restarting from checkpoint:', fstpso_checkpoint_in, '\n')
+    #         fstpso_checkpoint_in = f"{ns.user_config['exec_folder']}/{fstpso_checkpoint_in}"
 
-        # restart from a given checkpoint, if one was provided
-        if fstpso_checkpoint_in is not None and not ns.user_config['next_cycle']:
-            print('Restarting from checkpoint:', fstpso_checkpoint_in, '\n')
-            fstpso_checkpoint_in = f"{ns.user_config['exec_folder']}/{fstpso_checkpoint_in}"
+    # if restarting from checkpoint
+    if fstpso_checkpoint_in is not None:
+        initial_guess_list = None
+        fstpso_checkpoint_in = f"{ns.user_config['exec_folder']}/{fstpso_checkpoint_in}"
+    else:
+        initial_guess_list = get_initial_guess_list(ns)
 
     # actual optimization
     FP = FuzzyPSO()
@@ -1204,63 +1215,6 @@ for i in range(n_cycle, len(opti_cycles) + 1):
 
     # update data with parameters from the best scored models in the current opti cycle
     opti_cycle_best_params = result[0].X
-    param_id, nb_LJ = 0, 0
-
-    # TODO: this is for -next_cycle and does NOT work anymore
-    for param_dict in ns.all_params_opti:  # list of dict having unique keys
-        for param in param_dict:  # accessing each single key of each dict
-
-            # bonds, tune either: (1) both value and force constants or (2) fct only and use previously chosen bonds lengths (from average across geoms from all AA distribs, for example)
-            if param.startswith('B') and ns.tune_geoms:
-                if param_dict[param] == 2:
-                    ns.params_val[param]['avg'] = opti_cycle_best_params[param_id]  # val
-                    ns.user_config['init_bonded'][param]['fct'] = opti_cycle_best_params[
-                        param_id + 1]  # fct
-                else:
-                    ns.user_config['init_bonded'][param]['fct'] = opti_cycle_best_params[param_id]  # fct
-                param_id += param_dict[param]
-
-            # angles, tune either: (1) both value and force constants or (2) fct only if angle equilibrium value was pre-defined
-            if param.startswith('A') and ns.tune_geoms:
-                if param_dict[param] == 2:
-                    ns.params_val[param]['avg'] = opti_cycle_best_params[param_id]  # val
-                    ns.user_config['init_bonded'][param]['fct'] = opti_cycle_best_params[
-                        param_id + 1]  # fct
-                else:
-                    ns.user_config['init_bonded'][param]['fct'] = opti_cycle_best_params[param_id]  # fct
-                param_id += param_dict[param]
-
-            if param.startswith('r_'):
-                radii_grp = param.split('_')[1]
-                ns.user_config['init_beads_radii'][radii_grp] = opti_cycle_best_params[param_id]
-                param_id += param_dict[param]
-
-            if param.startswith('LJ'):
-                ns.user_config['init_nonbonded'][' '.join(ns.all_beads_pairs[nb_LJ])]['eps'] = opti_cycle_best_params[param_id]
-                param_id += param_dict[param]
-                nb_LJ += 1
 
 print(f'\n\n## FINISHING NOW, AFTER {ns.n_swarm_iter - 1} SWARM ITERATIONS ##\n\n')
-
-# NOTE: this is commented because we never go to the end of this script, and instead monitor manually the state of opti while running forever
-# print some stats
-# total_time_sec = datetime.now().timestamp() - ns.start_opti_ts
-# total_time = round(total_time_sec / (60 * 60), 2)
-# fitness_eval_time = round(ns.total_eval_time / (60 * 60), 2)
-# init_time = round((total_time_sec - ns.total_eval_time) / (60 * 60), 2)
-# ns.total_gmx_time = round(ns.total_gmx_time / (60 * 60), 2)
-# ns.total_model_eval_time = round(ns.total_model_eval_time / (60 * 60), 2)
-# print()
-# print(config.sep_close)
-# print('  FINISHED PROPERLY')
-# print(config.sep_close)
-# print()
-# print('Total nb of evaluation steps:', ns.nb_eval_particle)
-# print('Best model obtained at evaluation step number:', ns.best_fitness[1])
-# print()
-# print('Total execution time       :', total_time, 'h')
-# print('Initialization time        :', init_time, 'h ('+str(round(init_time/total_time*100, 2))+' %)')
-# print('Simulations/retrieval time :', ns.total_gmx_time, 'h ('+str(round(ns.total_gmx_time/total_time*100, 2))+' %)')
-# print('Models scoring time        :', ns.total_model_eval_time, 'h ('+str(round(ns.total_model_eval_time/total_time*100, 2))+' %)')
-# print()
 

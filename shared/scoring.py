@@ -19,20 +19,20 @@ def get_particle_score(ns, nb_eval_particle, swarm_res):
             score_parts = swarm_res[nb_eval_particle][lipid_code][temp]['score_part']
 
             # if user has specified that we make use of the simulations available for this lipid for bottom-up scoring
-            if ns.user_config['reference_AA_weight'][lipid_code] > 0:
+            if ns.user_config['reference_AA_weight'][lipid_code][temp] > 0:
 
                 delta_geoms_per_grp = score_parts['delta_geoms_per_grp']  # key: geom_grp then: list of float
                 delta_rdfs_per_grp = score_parts['delta_rdfs_per_grp']  # key: pair_type then: float
 
                 for geom_grp in delta_geoms_per_grp:
-                    weighted_delta_geoms = [dgeom * ns.user_config['reference_AA_weight'][lipid_code] for dgeom in delta_geoms_per_grp[geom_grp]]
+                    weighted_delta_geoms = [dgeom * ns.user_config['reference_AA_weight'][lipid_code][temp] for dgeom in delta_geoms_per_grp[geom_grp]]
                     if geom_grp not in all_delta_geoms_per_grp:
                         all_delta_geoms_per_grp[geom_grp] = weighted_delta_geoms
                     else:
                         all_delta_geoms_per_grp[geom_grp].extend(weighted_delta_geoms)
 
                 for pair_type in delta_rdfs_per_grp:
-                    weighted_delta_rdf = delta_rdfs_per_grp[pair_type] * ns.user_config['reference_AA_weight'][lipid_code]
+                    weighted_delta_rdf = delta_rdfs_per_grp[pair_type] * ns.user_config['reference_AA_weight'][lipid_code][temp]
                     if pair_type not in all_delta_rdfs_per_grp:
                         all_delta_rdfs_per_grp[pair_type] = [weighted_delta_rdf]
                     else:
