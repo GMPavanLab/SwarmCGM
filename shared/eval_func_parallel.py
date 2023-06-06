@@ -17,7 +17,7 @@ from datetime import datetime
 from statistics import mean
 import multiprocessing
 from shared.io import backup_swarm_iter_logs_and_checkpoint
-from shared.simulations import run_parallel, init_process
+from shared.simulations import run_parallel
 
 
 def create_files_and_dirs_for_swarm_iter(ns, parameters_sets, nb_eval_particles_range_over_complete_opti):
@@ -249,11 +249,13 @@ def eval_function_parallel_swarm(parameters_sets, args):
         delta_ts_master_remaining_h = 'INFINITE'
         print(f'Starting new SWARM iteration running in LOCAL (= without SLURM) using {ns.nb_slots} slots')
 
-        slots_states = multiprocessing.Array('i', ns.nb_slots, lock=True)
-        for i in range(ns.nb_slots):  # multiprocessing.Array does NOT like list comprehension
-            slots_states[i] = 1  # mark slot as available
+        # NOTE: this is NOT ENOUGH to only have lock=True here and array access has to be also managed with get_lock() or something
+        # slots_states = multiprocessing.Array('i', ns.nb_slots, lock=True)
+        # for i in range(ns.nb_slots):  # multiprocessing.Array does NOT like list comprehension
+        #     slots_states[i] = 1  # mark slot as available
 
-        with multiprocessing.Pool(processes=ns.nb_slots, initializer=init_process, initargs=(slots_states,)) as pool:
+        # with multiprocessing.Pool(processes=ns.nb_slots, initializer=init_process, initargs=(slots_states,)) as pool:
+        with multiprocessing.Pool(processes=ns.nb_slots) as pool:
             p_args = zip(repeat(ns), p_job_exec_dir, p_nb_eval_particle, p_lipid_code, p_temp)
             p_res = pool.starmap(run_parallel, p_args)
             p_time_start_str, p_time_end_str, p_time_elapsed_str = list(map(list, zip(*p_res)))

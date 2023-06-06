@@ -135,7 +135,8 @@ if os.path.isdir(ns.user_config['exec_folder']):
             max_found_checkpoint_nb = int(filename.split('.')[0].split('_')[2])
             if max_found_checkpoint_nb > fstpso_checkpoint_in_nb:
                 fstpso_checkpoint_in_nb = max_found_checkpoint_nb
-    if fstpso_checkpoint_in_nb > 0 and not ns.user_config['next_cycle']:
+    # if fstpso_checkpoint_in_nb > 0 and not ns.user_config['next_cycle']:
+    if fstpso_checkpoint_in_nb > 0:  # mid-2022 next_cycle is not used anymore
         fstpso_checkpoint_in = f'fstpso_checkpoint_{fstpso_checkpoint_in_nb}.obj'
         print('Loading FST-PSO checkpoint file:', fstpso_checkpoint_in, '\n')
 
@@ -156,18 +157,19 @@ if os.path.isdir(ns.user_config['exec_folder']):
         # it is possible that there is no FST-PSO checkpoint but the exec directory still exists
         # this happens when the opti did not reach the end of SWARM iter 2)
         if n_cycle_1 is not None:
-            if fstpso_checkpoint_in is not None or ns.user_config['next_cycle']:
+            # if fstpso_checkpoint_in is not None or ns.user_config['next_cycle']:
+            if fstpso_checkpoint_in is not None:  # mid-2022 next_cycle is not used anymore
                 try:
                     n_cycle = n_cycle_1  # continue within same opti cycle
                     n_swarm_iter = n_swarm_iter_1 + 1  # continue with the next swarm iteration
                     n_particle = n_particle_1
 
                     # if we want to do a calibrated re-initialization of the swarm from best results of the previous opti cycle
-                    if ns.user_config['next_cycle']:
-                        n_cycle += 1
-                        print('--> Going for a calibrated restart in a new optimization cycle')
-                    else:
-                        print('--> Going to continue an on-going optimization cycle')
+                    # if ns.user_config['next_cycle']:
+                    #     n_cycle += 1
+                    #     print('--> Going for a calibrated restart in a new optimization cycle')
+                    # else:
+                    print('--> Going to continue an on-going optimization cycle')
 
                 except ValueError:  # means we have just read the headers (not sure this below is relevant anymore)
                     n_swarm_iter = 1  # default start without checkpoints
@@ -940,6 +942,7 @@ for geom_grp in ns.all_bonds_types:
         geom_grp_std = 'Unknown'
 
     # DISABLED BLOCK BELOW SO THAT WE ALWAYS START FROM ALL THE VALUES PRESENT IN THE CONFIG FILE
+    ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
     # by default we start from the values in the config file, and we instead start from the AA average if the parameter has to be tuned
     # in case we have no AA reference data, then we fall back to the values in the config file
     # if geom_grp in ns.user_config['tune_bonds_equi_val'] and geom_grp_avg != 'Unknown':
@@ -987,6 +990,7 @@ for geom_grp in ns.all_angles_types:
         geom_grp_std = 'Unknown'
 
     # DISABLED BLOCK BELOW SO THAT WE ALWAYS START FROM ALL THE VALUES PRESENT IN THE CONFIG FILE
+    ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
     # by default we start from the values in the config file, and we instead start from the AA average if the parameter has to be tuned
     # in case we have no AA reference data, then we fall back to the values in the config file
     # if geom_grp in ns.user_config['tune_angles_equi_val'] and geom_grp_avg != 'Unknown':
@@ -1116,7 +1120,7 @@ if fstpso_checkpoint_in is None:
 # somehow long cycles with calibrated restarts using ALL parameters
 # (= no selection of bonds/angles/dihedrals/whatever like in Swarm-CG bonded version)
 opti_cycles = {
-    1: {'sim_time': ns.user_config['cg_time_prod'], 'cg_sampling': 4 / 3 * ns.user_config['cg_time_prod'], 'max_sw_iter': 50, 'max_sw_iter_no_new_best': 5}
+    1: {'sim_time': ns.user_config['cg_time_prod'], 'cg_sampling': 4 / 3 * ns.user_config['cg_time_prod'], 'max_sw_iter': 50, 'max_sw_iter_no_new_best': 10}
 }
 
 # for tests without opti cycles
