@@ -113,6 +113,9 @@ ns.opti_moves_file = 'opti_moves.log'
 ns.opti_moves_details_lipid_temp_file = 'opti_moves_details_lipid_temp.log'  # score parts and all info per lipid+temp
 ns.opti_moves_times_file = 'opti_moves_times.log'
 
+if not os.path.isdir(f"{config.data_aa_storage_dir}"):
+    os.mkdir(f"{config.data_aa_storage_dir}")
+
 # careful if continuing into an output directory of a previous optimization run
 fstpso_checkpoint_in = None  # by default we assume there is no checkpoint
 fstpso_checkpoint_in_nb = 0
@@ -942,7 +945,6 @@ for geom_grp in ns.all_bonds_types:
         geom_grp_std = 'Unknown'
 
     # DISABLED BLOCK BELOW SO THAT WE ALWAYS START FROM ALL THE VALUES PRESENT IN THE CONFIG FILE
-    ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
     # by default we start from the values in the config file, and we instead start from the AA average if the parameter has to be tuned
     # in case we have no AA reference data, then we fall back to the values in the config file
     # if geom_grp in ns.user_config['tune_bonds_equi_val'] and geom_grp_avg != 'Unknown':
@@ -990,7 +992,6 @@ for geom_grp in ns.all_angles_types:
         geom_grp_std = 'Unknown'
 
     # DISABLED BLOCK BELOW SO THAT WE ALWAYS START FROM ALL THE VALUES PRESENT IN THE CONFIG FILE
-    ns.params_val[geom_grp]['ref_eq_val'] = ns.user_config['init_bonded'][geom_grp]['val']
     # by default we start from the values in the config file, and we instead start from the AA average if the parameter has to be tuned
     # in case we have no AA reference data, then we fall back to the values in the config file
     # if geom_grp in ns.user_config['tune_angles_equi_val'] and geom_grp_avg != 'Unknown':

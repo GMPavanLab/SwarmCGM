@@ -10,7 +10,7 @@ lipids_codes:  # lipids and temperatures to use for this optimization (other inp
   POPC: [303K]
   DOPC: [303K]
 map_center: COG  # COG or COM, for using Center Of Geometry or Center Of Mass when reading the NDX files and getting the AA-mapped bottom-up ref. data
-reset: True  # if True, recalculates bond and angle distributions and distance distributions between pair of beads from the AA data
+reset: True  # if True, recalculates bond and angle distributions and distance distributions between pair of beads from the AA data, otherwise, they are saved as a pickle and will be re-used
 phosphate_pos:  # position of the phosphate atom or bead, used for calculating Dhh membrane thickness
   PC:  # per head type
     AA: 20  # atom id of the phosphate, 1-indexed
@@ -72,32 +72,32 @@ gpu_ids: "X X"  # string, space-separated GPU ids to use per simulation slot def
 gmx_gpu_cancel_str: "-nb cpu"  # string, will be added to GROMACS commands for the slots which have disabled GPU usage (= marked 'X' in 'gpu_ids')
 
 # 9. INITIAL FORCE FIELD PARAMETERS FOR BONDED TERMS
-init_bonded:  # must correspond to bond and angle types as defined in your input ITP files
-  B1: { val: 0, fct: 1250 }  # Bonds
-  B2: { val: 0, fct: 1250 }  # nm, kJ.mol-1.nm-2
-  B3: { val: 0, fct: 1250 }
-  B4: { val: 0, fct: 1250 }
-  B5: { val: 0, fct: 1250 }
-  B6: { val: 0, fct: 1250 }
-  B7: { val: 0, fct: 1250 }
-  B8: { val: 0, fct: 1250 }
-  B10: { val: 0, fct: 1250 }
-  B11: { val: 0, fct: 1250 }
-  A1: { val: 0, fct: 50 }  # Angles
-  A2: { val: 0, fct: 50 }  # degrees, kJ.mol-1
-  A3: { val: 0, fct: 50 }
-  A4: { val: 0, fct: 50 }
-  A5: { val: 0, fct: 50 }
-  A6: { val: 0, fct: 50 }
-  A7: { val: 0, fct: 50 }
-  A8: { val: 0, fct: 50 }
-  A9: { val: 0, fct: 50 }
-  A10: { val: 0, fct: 50 }
-  A11: { val: 0, fct: 50 }
-  A12: { val: 0, fct: 50 }
-  A13: { val: 0, fct: 50 }
-  A14: { val: 0, fct: 50 }
-  A15: { val: 0, fct: 50 }
+config_bonded_opti:  # must correspond to bond and angle types as defined in your input ITP files
+  B1: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]}}  # Bonds
+  B2: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }  # nm, kJ.mol-1.nm-2
+  B3: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }
+  B4: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }
+  B5: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }
+  B6: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }
+  B7: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }
+  B8: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }
+  B10: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }
+  B11: { start: { val: 0.5, fct: 1250 }, swarm_init: { val: [0, 1], fct: [500, 2500] }, boundaries: { val: [0, 1.5], fct: [0, 5000]} }
+  A1: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }  # Angles
+  A2: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }  # degrees, kJ.mol-1
+  A3: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A4: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A5: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A6: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A7: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A8: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A9: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A10: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A11: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A12: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A13: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A14: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
+  A15: { start: { val: 150, fct: 50 }, swarm_init: { val: [120, 160], fct: [0, 50] }, boundaries: { val: [0, 180], fct: [0, 150]} }
 
 # 10. INITIAL FORCE FIELD PARAMETERS FOR NON-BONDED TERMS
 init_nonbonded:  # must correspond to bead types as defined in your input ITP files
@@ -173,18 +173,13 @@ exp_data:
 
 # 15. WEIGHT/CONFIDENCE ATTRIBUTED TO/INTO THE REFERENCE AA TRAJECTORIES
 reference_AA_weight:  # setting value to 0 will disable the usage of the bottom-up component for a given lipid
-  POPC: 1.0
-  DOPC: 1.0
-  DPPC: 1.0
-  DMPC: 1.0
-  DLPC: 1.0
-  SDPC: 0.75
-  PDPC: 0.75
-  DSPC: 0
+  POPC:
+    303K: 1.0
+  DOPC:
+    303K: 1.0
 
 # 16. OTHERS PARAMETERS (SHOULD NOT NEED CHANGES)
 sim_kill_delay: 60  # number of seconds after which a simulation will be killed if it did not write in its log file
 bonds2angles_scoring_factor: 500
-next_cycle: False  # for restarting from the single best set of FF parameters in a previous optimization output directory
 row_x_scaling: True  # use the same scale on all X axes for bond and angle distribution plots
 row_y_scaling: True  # use the same scale on all Y axes for bond and angle distribution plots

@@ -18,7 +18,7 @@ The parameters of the CG lipid models are iteratively and simultaneously optimiz
 
 ![Overview of the principles used in SwarmCG for model and force field building](https://github.com/GMPavanLab/SwarmCGM/blob/main/images/Fig1.png)
 
-This code was recently applied as part of the efforts deployed for the further enhancement of lipid models in Martini 3. Proof-of-concept and testing of different CG resolutions for building alternative Martini lipid models is soon to be published in JCIM and a [preprint version is available on ChemRxiv](chemrxiv.org/engage/chemrxiv/article-details/642e9c97736114c96301544d). Resulting models obtained for phosphatidylcholine (PC) lipids are [available here](github.com/GMPavanLab/SwarmCGM/tree/main/resulting_models/). 
+This code was recently applied as part of efforts for the further enhancement of lipid models in Martini 3. Proof-of-concept and testing of different CG resolutions for building alternative Martini lipid models is soon to be published in JCIM and a [preprint version is available on ChemRxiv](chemrxiv.org/engage/chemrxiv/article-details/642e9c97736114c96301544d). Resulting models obtained for phosphatidylcholine (PC) lipids are [available here](https://github.com/GMPavanLab/SwarmCGM/tree/main/resulting_models/). 
 
 # System Requirements
 
@@ -54,7 +54,7 @@ Supported HPC resource managers:
 
 # Installation Guide
 
-Standalone files can be directly copied as [provided here](github.com/GMPavanLab/SwarmCGM/tree/main/).
+Standalone files can be directly copied as [provided here](https://github.com/GMPavanLab/SwarmCGM/tree/main/).
 
 Users must install the following python packages prior to executing the code:
 
@@ -62,7 +62,7 @@ Users must install the following python packages prior to executing the code:
 pip/pip3 install numpy scipy matplotlib MDAnalysis pyemd fst-pso pyyaml
 ```
 
-If you are having troubles installing or using this software, please [drop us an Issue](github.com/GMPavanLab/SwarmCGM/issues). 
+If you are having troubles installing or using this software, please [drop us an Issue](https://github.com/GMPavanLab/SwarmCGM/issues). 
 
 Tested python & package versions:
 - python: 3.6.12, 3.8.5
@@ -97,7 +97,7 @@ These values can be even further decreased for the purpose of testing the consis
 As the input of SwarmCG requires a preliminary CG mapping choice (*i.e.* defining the positions and types of the CG beads, bonds and angles used for building the molecular models which parameters will be optimized), several parameters allow to define precisely which parameters should be optimized, or which other ones stay at given fixed values, according to your requirements.
 To this end, SwarmCG makes use of [YAML](yaml.org) config files to simplify this process and help keeping track of the hyper-parameters used for an optimization run. 
 
-Please refer to [the demo YAML config file](github.com/GMPavanLab/SwarmCGM/tree/main/minimalistic_demo.yaml) for a breakdown of each parameter and step-by-step guidance on how to parametrize an optimization procedure.
+Please refer to [the demo YAML config file](https://github.com/GMPavanLab/SwarmCGM/tree/main/minimalistic_demo.yaml) for a breakdown of each parameter and step-by-step guidance on how to parametrize an optimization procedure.
 These parameters can also be related to the content and explanations provided in the paper.
 
 # Citation
